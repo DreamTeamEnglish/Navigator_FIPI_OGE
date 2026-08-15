@@ -340,11 +340,13 @@
       <div class="task-main">
         <a class="task-link" href="${escapeAttr(task.url)}" target="_blank" rel="noopener noreferrer" title="Открыть исходное задание на ФИПИ">${escapeHtml(task.fipiId)} ↗</a>
         <div class="task-actions">
-          ${editButton}
           <button class="status-toggle" type="button" data-task="${escapeAttr(key)}" data-status="${escapeAttr(status)}" title="Статус: ${escapeAttr(statusLabel(status))}. Нажмите, чтобы переключить."></button>
         </div>
       </div>
-      <div class="task-title">${escapeHtml(kes)} ${manualMarker}</div>
+      <div class="task-meta-row">
+        <div class="task-title">${escapeHtml(kes)} ${manualMarker}</div>
+        ${editButton}
+      </div>
       <div class="task-tags">${topicNames}${noTopic}</div>
     </article>`;
   }

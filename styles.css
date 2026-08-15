@@ -140,18 +140,19 @@ select:focus, input:focus { border-color: rgba(229, 189, 98, .65); box-shadow: 0
 .bucket-head h4 { font-size: 14px; margin: 8px 0 0; line-height: 1.25; }
 .bucket-range { display: inline-block; margin-top: 7px; color: var(--gold); font-family: Georgia, serif; font-size: 18px; }
 .bucket-body { padding: 10px; display: flex; flex-direction: column; gap: 9px; }
-.task-card { border: 1px solid rgba(122,163,255,.16); background: rgba(15, 32, 69, .54); border-radius: 12px; padding: 10px; transition: .18s ease; }
+.task-card { border: 1px solid rgba(122,163,255,.16); background: rgba(15, 32, 69, .54); border-radius: 12px; padding: 10px; transition: .18s ease; min-width: 0; overflow: hidden; }
 .task-card:hover { border-color: rgba(229,189,98,.42); transform: translateY(-1px); background: rgba(20, 42, 89, .72); }
-.task-main { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.task-main { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-width: 0; width: 100%; }
 .task-link { color: #f6f9ff; font-weight: 800; font-size: 13px; text-decoration: none; letter-spacing: .04em; white-space: nowrap; }
 .task-link:hover { color: var(--gold-2); }
-.status-toggle { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--line); background: rgba(0,0,0,.18); display: grid; place-items: center; color: var(--new); }
+.status-toggle { flex: 0 0 28px; width: 28px; height: 28px; max-width: 28px; border-radius: 9px; border: 1px solid var(--line); background: rgba(0,0,0,.18); display: grid; place-items: center; color: var(--new); }
 .status-toggle[data-status="viewed"] { color: var(--viewed); border-color: rgba(116,185,255,.35); }
 .status-toggle[data-status="used"] { color: var(--used); border-color: rgba(229,189,98,.45); }
 .status-toggle::before { content: "○"; font-size: 17px; line-height: 1; }
 .status-toggle[data-status="viewed"]::before { content: "◉"; }
 .status-toggle[data-status="used"]::before { content: "★"; font-size: 13px; }
-.task-title { margin-top: 7px; color: #9fb0d3; font-size: 10.5px; line-height: 1.35; }
+.task-title { color: #9fb0d3; font-size: 10.5px; line-height: 1.35; min-width: 0; }
+.task-meta-row { margin-top: 7px; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
 .task-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .task-tag { color: #8299c9; font-size: 9px; padding: 3px 5px; border-radius: 6px; background: rgba(81, 119, 199, .09); border: 1px solid rgba(92, 132, 219, .10); }
 .bucket-empty { color: #596c96; text-align: center; font-size: 11px; padding: 30px 8px; }
@@ -308,11 +309,12 @@ select:focus, input:focus { border-color: rgba(229, 189, 98, .65); box-shadow: 0
    PROTECTED v0.9.1 TEST — ADMIN TOPIC EDITOR
    ========================================================= */
 
-.task-actions { display: flex; align-items: center; gap: 5px; }
+.task-actions { display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; }
 .topic-edit-button {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 8px;
   border: 1px solid rgba(229,189,98,.28);
   background: rgba(229,189,98,.08);
   color: var(--gold);

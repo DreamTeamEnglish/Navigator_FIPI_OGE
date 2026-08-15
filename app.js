@@ -7,20 +7,30 @@
   const CLOUD_CACHE_PREFIX = 'oge-navigator-teacher-cache-v090:';
   const PENDING_PREFIX = 'oge-navigator-pending-v090:';
   const CATALOG_PAGE_SIZE = 1000;
+  const DONUT_PAGE_SIZE = 250;
   const UNTAGGED_TOPIC_ID = '__untagged__';
+  const ADMIN_CONTACT_URL = 'https://vk.ru/im?sel=-229391051';
+  const ADMIN_CONTACT_TEXT = 'Здравствуйте! Хочу получить доступ к тематическому навигатору по открытому банку заданий ОГЭ ФИПИ (English).';
+  const VK_APP_ID = 54721671;
+  const VK_REDIRECT_URL = 'https://dreamteamenglish.github.io/Navigator_FIPI_OGE/';
+  const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
+  const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
 
   const el = {
     accessGate: document.querySelector('#accessGate'),
     appShell: document.querySelector('#appShell'),
     accessMessage: document.querySelector('#accessMessage'),
     openLoginButton: document.querySelector('#openLoginButton'),
+    openDonutButton: document.querySelector('#openDonutButton'),
     openDemoButton: document.querySelector('#openDemoButton'),
     headerLoginButton: document.querySelector('#headerLoginButton'),
     signOutButton: document.querySelector('#signOutButton'),
+    adminAccessButton: document.querySelector('#adminAccessButton'),
     cloudBadge: document.querySelector('#cloudBadge'),
     modeKicker: document.querySelector('#modeKicker'),
     brandLogo: document.querySelector('#brandLogo'),
     footerYear: document.querySelector('#footerYear'),
+    toast: document.querySelector('#toast'),
 
     topic: document.querySelector('#topicSelect'),
     subtopic: document.querySelector('#subtopicSelect'),
@@ -40,6 +50,26 @@
     email: document.querySelector('#emailInput'),
     password: document.querySelector('#passwordInput'),
     signIn: document.querySelector('#signInButton'),
+
+    adminAccessDialog: document.querySelector('#adminAccessDialog'),
+    closeAdminAccessDialogButton: document.querySelector('#closeAdminAccessDialogButton'),
+    adminDemoState: document.querySelector('#adminDemoState'),
+    toggleDemoButton: document.querySelector('#toggleDemoButton'),
+    previewDemoButton: document.querySelector('#previewDemoButton'),
+    adminUserStats: document.querySelector('#adminUserStats'),
+    adminUsersList: document.querySelector('#adminUsersList'),
+    refreshAdminUsersButton: document.querySelector('#refreshAdminUsersButton'),
+
+    userAccessDialog: document.querySelector('#userAccessDialog'),
+    closeUserAccessDialogButton: document.querySelector('#closeUserAccessDialogButton'),
+    userAccessEmail: document.querySelector('#userAccessEmail'),
+    userStatusSelect: document.querySelector('#userStatusSelect'),
+    userAccessLevelSelect: document.querySelector('#userAccessLevelSelect'),
+    userExpiryPresetSelect: document.querySelector('#userExpiryPresetSelect'),
+    customExpiryLabel: document.querySelector('#customExpiryLabel'),
+    customExpiryDate: document.querySelector('#customExpiryDate'),
+    cancelUserAccessButton: document.querySelector('#cancelUserAccessButton'),
+    saveUserAccessButton: document.querySelector('#saveUserAccessButton'),
 
     topicDialog: document.querySelector('#topicDialog'),
     topicEditorTaskId: document.querySelector('#topicEditorTaskId'),
@@ -63,6 +93,12 @@
   let editingTaskId = null;
   let records = {};
   let refreshInFlight = false;
+  let adminProfiles = [];
+  let editingAccessUserId = null;
+  let demoEnabledState = false;
+  let toastTimer = null;
+  let donutUserId = null;
+  let adminDonutSessions = [];
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
@@ -82,6 +118,55 @@
   function safeParse(raw, fallback = {}) {
     try { return JSON.parse(raw || '') || fallback; }
     catch { return fallback; }
+  }
+
+
+  function isAuthenticatedWorkspaceMode() {
+    return ['admin', 'teacher', 'demo_user'].includes(appMode);
+  }
+
+  function isProfileExpired(profile) {
+    if (!profile?.access_expires_at) return false;
+    return new Date(profile.access_expires_at).getTime() <= Date.now();
+  }
+
+  function showToast(message) {
+    if (!el.toast) return;
+    window.clearTimeout(toastTimer);
+    el.toast.textContent = message;
+    el.toast.classList.remove('hidden');
+    toastTimer = window.setTimeout(() => el.toast.classList.add('hidden'), 3600);
+  }
+
+  function fallbackCopyText(text) {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand('copy'); }
+    finally { area.remove(); }
+  }
+
+  function copyAdminContactText() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(ADMIN_CONTACT_TEXT)
+          .then(() => showToast('✓ Текст обращения скопирован — вставьте его в сообщение VK'))
+          .catch(() => {
+            fallbackCopyText(ADMIN_CONTACT_TEXT);
+            showToast('✓ Текст обращения скопирован — вставьте его в сообщение VK');
+          });
+      } else {
+        fallbackCopyText(ADMIN_CONTACT_TEXT);
+        showToast('✓ Текст обращения скопирован — вставьте его в сообщение VK');
+      }
+    } catch {
+      fallbackCopyText(ADMIN_CONTACT_TEXT);
+      showToast('✓ Текст обращения скопирован — вставьте его в сообщение VK');
+    }
   }
 
   function normalizeRecords(value) {
@@ -108,10 +193,12 @@
   }
 
   function saveActiveRecords() {
-    if (currentUser && (appMode === 'admin' || appMode === 'teacher')) {
+    if (currentUser && isAuthenticatedWorkspaceMode()) {
       localStorage.setItem(cacheKey(currentUser.id), JSON.stringify(records));
     } else if (appMode === 'demo') {
       localStorage.setItem(DEMO_STATUS_KEY, JSON.stringify(records));
+    } else if (appMode === 'donut' && donutUserId) {
+      localStorage.setItem(`${DONUT_STORAGE_PREFIX}status:${donutUserId}`, JSON.stringify(records));
     }
   }
 
@@ -412,7 +499,7 @@
     saveActiveRecords();
     render();
 
-    if (!supabaseClient || !currentUser || !(appMode === 'admin' || appMode === 'teacher')) return;
+    if (!supabaseClient || !currentUser || !isAuthenticatedWorkspaceMode()) return;
 
     setBadge('syncing', 'SYNCING…', 'Сохраняю изменение');
     const { data, error } = await supabaseClient
@@ -715,7 +802,7 @@
   async function fetchProfile(userId) {
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('id,email,role,status')
+      .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
       .eq('id', userId)
       .single();
     if (error) throw error;
@@ -725,6 +812,8 @@
   function setSecureBadge() {
     if (appMode === 'admin') setBadge('live', 'ADMIN · SECURE', 'Полный защищённый доступ администратора');
     else if (appMode === 'teacher') setBadge('live', 'TEACHER · SECURE', 'Полный защищённый доступ учителя');
+    else if (appMode === 'demo_user') setBadge('demo', 'DEMO · INVITED', 'Персональный ограниченный доступ по приглашению');
+    else if (appMode === 'donut') setBadge('live', 'VK DONUT · ACTIVE', 'Подписка VK Donut проверена на сервере');
   }
 
   function enterApp(mode) {
@@ -734,11 +823,20 @@
     el.appShell.classList.remove('hidden');
     el.headerLoginButton.classList.add('hidden');
     el.signOutButton.classList.remove('hidden');
+    el.adminAccessButton.classList.toggle('hidden', mode !== 'admin');
 
     if (mode === 'demo') {
       el.modeKicker.textContent = 'DEMO · 44 CURATED TASKS';
       el.signOutButton.textContent = 'Выйти из DEMO';
       setBadge('demo', `DEMO · ${tasks.length}`, 'Ограниченная демонстрационная выборка');
+    } else if (mode === 'demo_user') {
+      el.modeKicker.textContent = 'DEMO · INVITED ACCESS';
+      el.signOutButton.textContent = 'Выйти';
+      setSecureBadge();
+    } else if (mode === 'donut') {
+      el.modeKicker.textContent = 'VK DONUT · FULL ACCESS';
+      el.signOutButton.textContent = 'Выйти';
+      setSecureBadge();
     } else {
       el.modeKicker.textContent = 'LEXICAL FIRST';
       el.signOutButton.textContent = 'Выйти';
@@ -759,6 +857,7 @@
     el.accessGate.classList.remove('hidden');
     el.headerLoginButton.classList.toggle('hidden', Boolean(currentUser));
     el.signOutButton.classList.toggle('hidden', !currentUser);
+    el.adminAccessButton.classList.add('hidden');
     el.signOutButton.textContent = 'Выйти';
     setBadge('protected', 'PROTECTED', 'Каталог защищён Supabase Auth + RLS');
     if (message) showAccessMessage(message, kind);
@@ -799,6 +898,106 @@
     }
   }
 
+  function randomUrlSafe(length, alphabet) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  }
+
+  function cleanCallbackUrl() {
+    const url = new URL(window.location.href);
+    ['code', 'device_id', 'state', 'type'].forEach(key => url.searchParams.delete(key));
+    history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function startDonutLogin() {
+    clearAccessMessage();
+    try {
+      const VKID = window.VKIDSDK;
+      if (!VKID?.Config?.init || !VKID?.Auth?.login) throw new Error('VK ID SDK не загрузился. Обновите страницу.');
+      const state = randomUrlSafe(40, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-');
+      const codeVerifier = randomUrlSafe(72, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~');
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}state`, state);
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}verifier`, codeVerifier);
+      VKID.Config.init({ app: VK_APP_ID, redirectUrl: VK_REDIRECT_URL, state, codeVerifier,
+        ...(VKID.ConfigAuthMode?.Redirect ? { mode: VKID.ConfigAuthMode.Redirect } : {}) });
+      el.openDonutButton.disabled = true;
+      showAccessMessage('Открываю VK ID…', 'info');
+      VKID.Auth.login().catch(error => {
+        el.openDonutButton.disabled = false;
+        showAccessMessage(`Не удалось открыть VK ID: ${error?.message || error}`, 'error');
+      });
+    } catch (error) {
+      el.openDonutButton.disabled = false;
+      showAccessMessage(error?.message || String(error), 'error');
+    }
+  }
+
+  async function callDonutFunction(body, authToken = '') {
+    const response = await fetch(DONUT_FUNCTION_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) throw new Error(data?.error || `Ошибка сервера (${response.status})`);
+    return data;
+  }
+
+  async function fetchDonutCatalog(token) {
+    const cards = [];
+    for (let offset = 0; ; offset += DONUT_PAGE_SIZE) {
+      const data = await callDonutFunction({ action: 'catalog', session_token: token, offset, limit: DONUT_PAGE_SIZE });
+      const page = Array.isArray(data.cards) ? data.cards : [];
+      cards.push(...page);
+      if (page.length < DONUT_PAGE_SIZE) break;
+    }
+    return cards;
+  }
+
+  async function enterDonutSession(token, vkUserId) {
+    showGate('gate', 'Загружаю защищённый каталог…', 'info');
+    const cards = await fetchDonutCatalog(token);
+    if (!cards.length) throw new Error('Защищённый каталог не вернул карточки.');
+    donutUserId = String(vkUserId);
+    records = normalizeRecords(safeParse(localStorage.getItem(`${DONUT_STORAGE_PREFIX}status:${donutUserId}`), {}));
+    setTasks(cards, new Map());
+    enterApp('donut');
+  }
+
+  async function processDonutCallback() {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const deviceId = url.searchParams.get('device_id');
+    const state = url.searchParams.get('state');
+    if (!code && !deviceId && !state) return false;
+    showGate('gate', 'Проверяю подписку VK Donut…', 'info');
+    try {
+      const expectedState = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}state`) || '';
+      const codeVerifier = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}verifier`) || '';
+      if (!code || !deviceId || !state || !expectedState || !codeVerifier) throw new Error('Данные входа неполные. Начните вход через VK заново.');
+      if (state !== expectedState) throw new Error('State не совпадает. Начните вход через VK заново.');
+      const result = await callDonutFunction({ action: 'exchange', code, device_id: deviceId, state,
+        expected_state: expectedState, code_verifier: codeVerifier });
+      if (!result.is_don) {
+        showGate('gate', 'Активная подписка VK Donut не найдена. Можно открыть DEMO или войти по приглашению.', 'warning');
+        return true;
+      }
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}session`, result.session_token);
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}vk_user_id`, String(result.vk_user_id));
+      await enterDonutSession(result.session_token, result.vk_user_id);
+      return true;
+    } catch (error) {
+      console.error('VK Donut access failed:', error);
+      showGate('gate', `Не удалось проверить VK Donut: ${error?.message || error}`, 'error');
+      return true;
+    } finally {
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}state`);
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}verifier`);
+      cleanCallbackUrl();
+    }
+  }
+
   async function activateAuthenticatedSession(user) {
     currentUser = user;
     currentProfile = null;
@@ -821,6 +1020,28 @@
         showGate('blocked', 'Для этого аккаунта нет активного доступа к каталогу.', 'error');
         return;
       }
+      if (isProfileExpired(profile)) {
+        showGate('blocked', 'Срок доступа завершён. Обратитесь к администратору.', 'warning');
+        return;
+      }
+
+      records = loadCloudCache(user.id);
+
+      if (profile.role === 'teacher' && profile.access_level === 'demo') {
+        const { data, error } = await supabaseClient.rpc('get_demo_tasks');
+        if (error) throw error;
+        const cards = (data || []).map(row => row.card).filter(Boolean);
+        if (!cards.length) throw new Error('Персональная DEMO-подборка недоступна.');
+        setTasks(cards, new Map());
+        enterApp('demo_user');
+        await loadCloudStatuses();
+        return;
+      }
+
+      if (profile.access_level !== 'full') {
+        showGate('blocked', 'Для этого аккаунта нет полного доступа к каталогу.', 'error');
+        return;
+      }
 
       const [cards, overrides] = await Promise.all([
         fetchFullCatalog(),
@@ -829,13 +1050,283 @@
       if (cards.length !== 1735) {
         console.warn(`Protected catalog returned ${cards.length} cards; expected 1735.`);
       }
-      records = loadCloudCache(user.id);
       setTasks(cards, overrides);
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
       await loadCloudStatuses();
     } catch (error) {
       console.error('Access activation failed:', error);
       showGate('blocked', 'Не удалось проверить доступ к защищённому каталогу. Попробуйте позже.', 'error');
+    }
+  }
+
+
+  function formatAccessExpiry(value) {
+    if (!value) return 'бессрочно';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    const expired = date.getTime() <= Date.now();
+    const text = date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    return expired ? `истёк · ${text}` : `до ${text}`;
+  }
+
+  function statusDisplay(status) {
+    if (status === 'active') return 'ACTIVE';
+    if (status === 'blocked') return 'BLOCKED';
+    return 'PENDING';
+  }
+
+  function accessDisplay(level) {
+    return level === 'demo' ? 'DEMO' : 'FULL';
+  }
+
+  async function fetchAdminProfiles() {
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function fetchAdminDonutSessions() {
+    const { data } = await supabaseClient.auth.getSession();
+    const token = data?.session?.access_token || '';
+    if (!token) return [];
+    const result = await callDonutFunction({ action: 'admin_sessions' }, token);
+    return Array.isArray(result.sessions) ? result.sessions : [];
+  }
+
+  async function revokeDonutSession(vkUserId) {
+    if (!window.confirm(`Завершить активную Donut-сессию VK ID ${vkUserId}?`)) return;
+    const { data } = await supabaseClient.auth.getSession();
+    await callDonutFunction({ action: 'admin_revoke', vk_user_id: Number(vkUserId) }, data?.session?.access_token || '');
+    await refreshAdminPanel();
+  }
+
+  async function fetchDemoEnabled() {
+    const { data, error } = await supabaseClient.rpc('demo_is_enabled');
+    if (error) throw error;
+    return Boolean(data);
+  }
+
+  function renderAdminUsers() {
+    const rows = adminProfiles;
+    const active = rows.filter(p => p.status === 'active' && !isProfileExpired(p)).length;
+    const pending = rows.filter(p => p.status === 'pending').length;
+    const blocked = rows.filter(p => p.status === 'blocked').length;
+    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · Donut-сессии: ${adminDonutSessions.length}`;
+
+    if (!rows.length) {
+      el.adminUsersList.innerHTML = '<div class="admin-users-empty">Пользователей пока нет.</div>';
+      return;
+    }
+
+    el.adminUsersList.innerHTML = rows.map(profile => {
+      const self = profile.id === currentUser?.id;
+      const expired = isProfileExpired(profile);
+      const meta = [
+        profile.role === 'admin' ? 'ADMIN' : 'TEACHER',
+        accessDisplay(profile.access_level),
+        statusDisplay(profile.status),
+        expired ? 'EXPIRED' : formatAccessExpiry(profile.access_expires_at)
+      ].join(' · ');
+
+      let actions = '<span class="admin-self-note">Это ваш аккаунт</span>';
+      if (!self) {
+        const quick = profile.status === 'blocked'
+          ? `<button class="button secondary compact" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="active">Восстановить</button>`
+          : profile.status === 'pending'
+            ? `<button class="button secondary compact" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="active">Разрешить</button>`
+            : `<button class="button ghost compact danger-soft" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="blocked">Заблокировать</button>`;
+
+        actions = `<button class="button ghost compact" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button>${quick}`;
+      }
+
+      return `<article class="admin-user-row${self ? ' self' : ''}">
+        <div class="admin-user-main">
+          <strong>${escapeHtml(profile.email || 'Без email')}</strong>
+          <span>${escapeHtml(meta)}</span>
+        </div>
+        <div class="admin-user-actions">${actions}</div>
+      </article>`;
+    }).join('');
+
+    el.adminUsersList.querySelectorAll('[data-user-edit]').forEach(button => {
+      button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEdit));
+    });
+    el.adminUsersList.querySelectorAll('[data-user-quick]').forEach(button => {
+      button.addEventListener('click', () => quickSetUserStatus(button.dataset.userQuick, button.dataset.nextStatus));
+    });
+
+    if (adminDonutSessions.length) {
+      el.adminUsersList.insertAdjacentHTML('beforeend', `<div class="admin-users-empty">Активные VK Donut-сессии</div>${adminDonutSessions.map(row =>
+        `<article class="admin-user-row"><div class="admin-user-main"><strong>VK ID ${escapeHtml(row.vk_user_id)}</strong><span>DONUT · до ${escapeHtml(new Date(row.expires_at).toLocaleString('ru-RU'))}</span></div><div class="admin-user-actions"><button class="button ghost compact danger-soft" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить</button></div></article>`
+      ).join('')}`);
+      el.adminUsersList.querySelectorAll('[data-donut-revoke]').forEach(button => {
+        button.addEventListener('click', () => revokeDonutSession(button.dataset.donutRevoke));
+      });
+    }
+  }
+
+  function renderAdminDemoState() {
+    el.adminDemoState.textContent = demoEnabledState ? '● Включено' : '○ Выключено';
+    el.adminDemoState.className = demoEnabledState ? 'demo-state on' : 'demo-state off';
+    el.toggleDemoButton.textContent = demoEnabledState ? 'Выключить' : 'Включить';
+  }
+
+  async function refreshAdminPanel() {
+    if (appMode !== 'admin' || !currentUser) return;
+    el.adminUserStats.textContent = 'Загрузка…';
+    el.adminUsersList.innerHTML = '<div class="admin-users-empty">Загружаю пользователей…</div>';
+    try {
+      const [profiles, enabled, donutSessions] = await Promise.all([
+        fetchAdminProfiles(),
+        fetchDemoEnabled(),
+        fetchAdminDonutSessions()
+      ]);
+      adminProfiles = profiles;
+      adminDonutSessions = donutSessions;
+      demoEnabledState = enabled;
+      renderAdminDemoState();
+      renderAdminUsers();
+    } catch (error) {
+      console.error('Admin panel refresh failed:', error);
+      el.adminUserStats.textContent = 'Не удалось загрузить данные';
+      el.adminUsersList.innerHTML = `<div class="admin-users-empty error-text">${escapeHtml(error?.message || error)}</div>`;
+    }
+  }
+
+  async function openAdminPanel() {
+    if (appMode !== 'admin') return;
+    if (typeof el.adminAccessDialog.showModal === 'function') el.adminAccessDialog.showModal();
+    await refreshAdminPanel();
+  }
+
+  async function toggleDemoFromAdmin() {
+    if (appMode !== 'admin') return;
+    el.toggleDemoButton.disabled = true;
+    try {
+      const next = !demoEnabledState;
+      const { data, error } = await supabaseClient.rpc('set_demo_enabled', { p_enabled: next });
+      if (error) throw error;
+      demoEnabledState = Boolean(data);
+      renderAdminDemoState();
+      showToast(demoEnabledState ? '✓ Публичный DEMO включён' : '✓ Публичный DEMO выключен');
+    } catch (error) {
+      console.error('DEMO toggle failed:', error);
+      alert(`Не удалось изменить DEMO: ${error?.message || error}`);
+    } finally {
+      el.toggleDemoButton.disabled = false;
+    }
+  }
+
+  function localDateInputValue(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function openUserAccessEditor(userId) {
+    if (appMode !== 'admin') return;
+    const profile = adminProfiles.find(p => p.id === userId);
+    if (!profile || profile.id === currentUser?.id) return;
+
+    editingAccessUserId = userId;
+    el.userAccessEmail.textContent = profile.email || userId;
+    el.userStatusSelect.value = profile.status || 'pending';
+    el.userAccessLevelSelect.value = profile.access_level === 'demo' ? 'demo' : 'full';
+
+    if (profile.access_expires_at) {
+      el.userExpiryPresetSelect.value = 'custom';
+      el.customExpiryDate.value = localDateInputValue(profile.access_expires_at);
+      el.customExpiryLabel.classList.remove('hidden');
+    } else {
+      el.userExpiryPresetSelect.value = 'none';
+      el.customExpiryDate.value = '';
+      el.customExpiryLabel.classList.add('hidden');
+    }
+
+    if (typeof el.userAccessDialog.showModal === 'function') el.userAccessDialog.showModal();
+  }
+
+  function resolveExpiryFromEditor() {
+    const preset = el.userExpiryPresetSelect.value;
+    if (preset === 'none') return null;
+
+    if (preset === 'custom') {
+      if (!el.customExpiryDate.value) throw new Error('Выберите дату окончания доступа.');
+      const [year, month, day] = el.customExpiryDate.value.split('-').map(Number);
+      const end = new Date(year, month - 1, day, 23, 59, 59, 999);
+      return end.toISOString();
+    }
+
+    const days = Number(preset);
+    if (![1, 3, 7].includes(days)) return null;
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  async function callAdminSetUserAccess(profile, nextStatus, nextLevel, nextExpiry) {
+    const { data, error } = await supabaseClient.rpc('admin_set_user_access', {
+      p_user_id: profile.id,
+      p_status: nextStatus,
+      p_access_level: nextLevel,
+      p_access_expires_at: nextExpiry
+    });
+    if (error) throw error;
+    return Array.isArray(data) ? data[0] : data;
+  }
+
+  async function saveUserAccess() {
+    if (appMode !== 'admin' || !editingAccessUserId) return;
+    const profile = adminProfiles.find(p => p.id === editingAccessUserId);
+    if (!profile) return;
+
+    el.saveUserAccessButton.disabled = true;
+    try {
+      const expiry = resolveExpiryFromEditor();
+      await callAdminSetUserAccess(
+        profile,
+        el.userStatusSelect.value,
+        el.userAccessLevelSelect.value,
+        expiry
+      );
+      el.userAccessDialog.close();
+      editingAccessUserId = null;
+      await refreshAdminPanel();
+      showToast('✓ Доступ пользователя обновлён');
+    } catch (error) {
+      console.error('User access save failed:', error);
+      alert(`Не удалось изменить доступ: ${error?.message || error}`);
+    } finally {
+      el.saveUserAccessButton.disabled = false;
+    }
+  }
+
+  async function quickSetUserStatus(userId, nextStatus) {
+    if (appMode !== 'admin') return;
+    const profile = adminProfiles.find(p => p.id === userId);
+    if (!profile || profile.id === currentUser?.id) return;
+
+    const label = nextStatus === 'blocked' ? 'заблокировать' : 'разрешить доступ для';
+    if (!window.confirm(`${label} ${profile.email || 'этого пользователя'}?`)) return;
+
+    try {
+      let expiry = profile.access_expires_at || null;
+      if (nextStatus === 'active' && expiry && new Date(expiry).getTime() <= Date.now()) expiry = null;
+      await callAdminSetUserAccess(profile, nextStatus, profile.access_level || 'full', expiry);
+      await refreshAdminPanel();
+      showToast(nextStatus === 'blocked' ? '✓ Пользователь заблокирован' : '✓ Доступ активирован');
+    } catch (error) {
+      console.error('Quick access update failed:', error);
+      alert(`Не удалось изменить доступ: ${error?.message || error}`);
     }
   }
 
@@ -863,6 +1354,13 @@
   }
 
   async function leaveCurrentMode() {
+    if (appMode === 'donut') {
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
+      donutUserId = null;
+      showGate('gate');
+      return;
+    }
     if (appMode === 'demo') {
       if (currentUser) await activateAuthenticatedSession(currentUser);
       else showGate('gate');
@@ -886,7 +1384,7 @@
     }
 
     if (appMode === 'demo' && event === 'INITIAL_SESSION') return;
-    if (currentUser?.id === user.id && ['admin','teacher','pending','blocked'].includes(appMode) && event === 'INITIAL_SESSION') return;
+    if (currentUser?.id === user.id && ['admin','teacher','demo_user','pending','blocked'].includes(appMode) && event === 'INITIAL_SESSION') return;
     await activateAuthenticatedSession(user);
   }
 
@@ -915,7 +1413,7 @@
   }
 
   function refreshWhenVisible() {
-    if (document.visibilityState === 'visible' && currentUser && (appMode === 'admin' || appMode === 'teacher')) {
+    if (document.visibilityState === 'visible' && currentUser && isAuthenticatedWorkspaceMode()) {
       loadCloudStatuses();
     }
   }
@@ -926,11 +1424,33 @@
   el.search.addEventListener('input', render);
   el.reset.addEventListener('click', () => resetFilters(true));
   el.openLoginButton.addEventListener('click', openAuthDialog);
+  el.openDonutButton.addEventListener('click', startDonutLogin);
   el.headerLoginButton.addEventListener('click', openAuthDialog);
   el.openDemoButton.addEventListener('click', startDemo);
   el.signOutButton.addEventListener('click', leaveCurrentMode);
   el.signIn.addEventListener('click', signIn);
   el.password.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+
+
+  el.adminAccessButton.addEventListener('click', openAdminPanel);
+  el.closeAdminAccessDialogButton.addEventListener('click', () => el.adminAccessDialog.close());
+  el.toggleDemoButton.addEventListener('click', toggleDemoFromAdmin);
+  el.previewDemoButton.addEventListener('click', () => {
+    el.adminAccessDialog.close();
+    startDemo();
+  });
+  el.refreshAdminUsersButton.addEventListener('click', refreshAdminPanel);
+
+  el.closeUserAccessDialogButton.addEventListener('click', () => el.userAccessDialog.close());
+  el.cancelUserAccessButton.addEventListener('click', () => el.userAccessDialog.close());
+  el.saveUserAccessButton.addEventListener('click', saveUserAccess);
+  el.userExpiryPresetSelect.addEventListener('change', () => {
+    el.customExpiryLabel.classList.toggle('hidden', el.userExpiryPresetSelect.value !== 'custom');
+  });
+
+  document.querySelectorAll('[data-admin-contact]').forEach(link => {
+    link.addEventListener('click', () => copyAdminContactText());
+  });
 
   el.addTopicRowButton.addEventListener('click', () => {
     el.topicOverrideRows.appendChild(makeTopicRow());
@@ -941,7 +1461,7 @@
 
   document.addEventListener('visibilitychange', refreshWhenVisible);
   window.addEventListener('online', () => {
-    if (currentUser && (appMode === 'admin' || appMode === 'teacher')) loadCloudStatuses();
+    if (currentUser && isAuthenticatedWorkspaceMode()) loadCloudStatuses();
   });
 
   el.footerYear.textContent = String(new Date().getFullYear());
@@ -949,6 +1469,22 @@
     if (!el.brandLogo.src.endsWith('brand-logo-fallback.svg')) el.brandLogo.src = 'assets/brand-logo-fallback.svg';
   }, { once: true });
 
-  showGate('gate');
-  initCloud();
+  async function bootstrap() {
+    showGate('gate');
+    await initCloud();
+    if (currentUser) return;
+    if (await processDonutCallback()) return;
+    const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
+    const vkUserId = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}vk_user_id`) || '';
+    if (token && vkUserId) {
+      try { await enterDonutSession(token, vkUserId); }
+      catch (error) {
+        sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
+        sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
+        showGate('gate', 'Сессия VK Donut истекла. Войдите через VK снова.', 'warning');
+      }
+    }
+  }
+
+  bootstrap();
 })();

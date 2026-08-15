@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>VK ID Test · OGE Navigator</title>
+  <style>
+    :root {
+      --bg: #030817;
+      --panel: #0a193d;
+      --panel-2: #050b1d;
+      --text: #f7f9ff;
+      --muted: #9aabd0;
+      --gold: #e5bd62;
+      --gold-2: #fff0b2;
+      --line: rgba(122, 163, 255, .22);
+      --blue: #174695;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px 16px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 0%, rgba(33, 86, 185, .28), transparent 36%),
+        radial-gradient(circle at 88% 80%, rgba(198, 157, 66, .08), transparent 30%),
+        linear-gradient(155deg, #020613 0%, #06102a 48%, #030817 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .card {
+      width: min(680px, 100%);
+      padding: 38px;
+      border: 1px solid rgba(229, 189, 98, .28);
+      border-radius: 26px;
+      background: linear-gradient(155deg, rgba(10, 25, 61, .97), rgba(5, 11, 29, .97));
+      box-shadow: 0 30px 90px rgba(0, 0, 0, .4);
+    }
+
+    .kicker {
+      display: inline-block;
+      margin-bottom: 10px;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(30px, 5vw, 46px);
+      line-height: 1.05;
+      font-weight: 500;
+    }
+
+    p { color: var(--muted); line-height: 1.6; }
+
+    .info {
+      margin: 22px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(23, 70, 149, .12);
+      color: #cbd9f8;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .button {
+      width: 100%;
+      min-height: 50px;
+      border: 0;
+      border-radius: 13px;
+      padding: 11px 16px;
+      background: linear-gradient(135deg, #f1cf7a, #c9922f);
+      color: #07142e;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .18s ease;
+    }
+
+    .button:hover { transform: translateY(-1px); }
+    .button:disabled { opacity: .55; cursor: wait; transform: none; }
+
+    .status {
+      margin-top: 15px;
+      min-height: 22px;
+      color: #9fb8ec;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .status.error { color: #ffaaa7; }
+    .status.ok { color: var(--gold-2); }
+
+    .small {
+      margin: 18px 0 0;
+      color: #7185af;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    code {
+      color: var(--gold-2);
+      background: rgba(0,0,0,.2);
+      padding: 2px 5px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <span class="kicker">VK ID · ISOLATED TEST</span>
+    <h1>Проверка входа через VK</h1>
+    <p>Эта страница не подключается к Supabase, не читает каталог Navigator и не использует <code>config.js</code>.</p>
+
+    <div class="info">
+      После успешного входа VK вернёт браузер на основной адрес Navigator. На первом тесте нам нужно увидеть только, появились ли в адресной строке параметры <code>code</code>, <code>device_id</code> и <code>state</code>.
+    </div>
+
+    <button id="vkLoginButton" class="button" type="button">Войти через VK</button>
+    <div id="vkStatus" class="status">Готово к тесту.</div>
+
+    <p class="small">
+      Важно: если после возврата в Navigator в URL появятся значения <code>code=...</code> и <code>device_id=...</code>, не присылай сами значения — достаточно сообщить, что они появились.
+    </p>
+  </main>
+
+  <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
+  <script src="vk-test.js"></script>
+</body>
+</html>

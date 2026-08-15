@@ -7,6 +7,7 @@
   const CLOUD_CACHE_PREFIX = 'oge-navigator-teacher-cache-v090:';
   const PENDING_PREFIX = 'oge-navigator-pending-v090:';
   const CATALOG_PAGE_SIZE = 1000;
+  const UNTAGGED_TOPIC_ID = '__untagged__';
 
   const el = {
     accessGate: document.querySelector('#accessGate'),
@@ -38,7 +39,18 @@
     authError: document.querySelector('#authError'),
     email: document.querySelector('#emailInput'),
     password: document.querySelector('#passwordInput'),
-    signIn: document.querySelector('#signInButton')
+    signIn: document.querySelector('#signInButton'),
+
+    topicDialog: document.querySelector('#topicDialog'),
+    topicEditorTaskId: document.querySelector('#topicEditorTaskId'),
+    topicEditorAutoTags: document.querySelector('#topicEditorAutoTags'),
+    topicOverrideMode: document.querySelector('#topicOverrideMode'),
+    topicOverrideRows: document.querySelector('#topicOverrideRows'),
+    addTopicRowButton: document.querySelector('#addTopicRowButton'),
+    topicOverrideNote: document.querySelector('#topicOverrideNote'),
+    saveTopicOverrideButton: document.querySelector('#saveTopicOverrideButton'),
+    resetTopicOverrideButton: document.querySelector('#resetTopicOverrideButton'),
+    closeTopicDialogButton: document.querySelector('#closeTopicDialogButton')
   };
 
   let supabaseClient = null;
@@ -46,6 +58,9 @@
   let currentProfile = null;
   let appMode = 'gate'; // gate | demo | admin | teacher | pending | blocked
   let tasks = [];
+  let baseCards = [];
+  let overrideMap = new Map();
+  let editingTaskId = null;
   let records = {};
   let refreshInFlight = false;
 
@@ -172,11 +187,38 @@
     };
   }
 
-  function normalizeTask(card) {
-    const tags = (Array.isArray(card?.tags) ? card.tags : [])
-      .map(normalizeTag)
-      .filter(Boolean)
-      .sort((a, b) => b.confidence - a.confidence);
+  function dedupeTags(tags) {
+    const seen = new Set();
+    const out = [];
+    for (const tag of tags || []) {
+      if (!tag?.topic) continue;
+      const key = `${tag.topic}\u0000${tag.subtopic || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(tag);
+    }
+    return out;
+  }
+
+  function normalizeTask(card, override = null) {
+    const autoTags = dedupeTags(
+      (Array.isArray(card?.tags) ? card.tags : [])
+        .map(normalizeTag)
+        .filter(Boolean)
+        .sort((a, b) => b.confidence - a.confidence)
+    );
+
+    const manualTags = dedupeTags(
+      (Array.isArray(override?.manual_tags) ? override.manual_tags : [])
+        .map(normalizeTag)
+        .filter(Boolean)
+    );
+
+    const effectiveTags = override
+      ? (override.mode === 'replace'
+          ? manualTags
+          : dedupeTags([...manualTags, ...autoTags]))
+      : autoTags;
 
     return {
       ...card,
@@ -188,21 +230,29 @@
       topicId: card?.topicId || card?.topic_id || null,
       subtopic: card?.subtopic || null,
       keywords: Array.isArray(card?.keywords) ? card.keywords : [],
-      tags
+      tags: effectiveTags,
+      _autoTags: autoTags,
+      _override: override || null
     };
   }
 
-  function setTasks(cards) {
-    tasks = (cards || []).map(normalizeTask).filter(t => t.fipiId && t.bucket && t.url);
+  function setTasks(cards, overrides = new Map(), resetAfter = true) {
+    baseCards = Array.isArray(cards) ? cards.slice() : [];
+    overrideMap = overrides instanceof Map ? overrides : new Map();
+    tasks = baseCards
+      .map(card => normalizeTask(card, overrideMap.get(card?.fipiId || card?.fipi_id || '') || null))
+      .filter(t => t.fipiId && t.bucket && t.url);
     DATA.tasks = tasks;
     populateTopics();
-    resetFilters(false);
+    if (resetAfter) resetFilters(false);
+    else populateSubtopics();
     render();
   }
 
   function availableTopicIds() {
     const ids = new Set();
     for (const task of tasks) for (const tag of task.tags) if (tag.topic) ids.add(tag.topic);
+    if (tasks.some(task => !task.tags.length)) ids.add(UNTAGGED_TOPIC_ID);
     return ids;
   }
 
@@ -220,7 +270,7 @@
     const previous = el.subtopic.value || 'all';
     const values = new Set();
 
-    if (topicId !== 'all') {
+    if (topicId !== 'all' && topicId !== UNTAGGED_TOPIC_ID) {
       for (const task of tasks) {
         for (const tag of task.tags) {
           if (tag.topic === topicId && tag.subtopic) values.add(tag.subtopic);
@@ -233,6 +283,7 @@
       .concat(sorted.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`))
       .join('');
     el.subtopic.value = sorted.includes(previous) ? previous : 'all';
+    el.subtopic.disabled = topicId === UNTAGGED_TOPIC_ID;
   }
 
   function filterTasks() {
@@ -243,8 +294,10 @@
 
     return tasks.filter(task => {
       const taskStatus = getStatus(taskKey(task));
-      const topicMatch = topic === 'all' || task.tags.some(tag => tag.topic === topic);
-      const subtopicMatch = subtopic === 'all' || task.tags.some(tag => tag.topic === topic && tag.subtopic === subtopic);
+      const topicMatch = topic === 'all'
+        || (topic === UNTAGGED_TOPIC_ID ? task.tags.length === 0 : task.tags.some(tag => tag.topic === topic));
+      const subtopicMatch = subtopic === 'all'
+        || (topic !== UNTAGGED_TOPIC_ID && task.tags.some(tag => tag.topic === topic && tag.subtopic === subtopic));
       const statusMatch = status === 'all' || taskStatus === status;
       const topicTexts = task.tags.flatMap(tag => {
         const meta = DATA.topics.find(t => t.id === tag.topic);
@@ -254,8 +307,6 @@
         task.fipiId,
         task.liveKesCode || '',
         task.answerType || '',
-        task.topic || '',
-        task.subtopic || '',
         ...(task.keywords || []),
         ...topicTexts
       ].join(' ').toLowerCase();
@@ -267,23 +318,33 @@
   function taskCard(task) {
     const key = taskKey(task);
     const status = getStatus(key);
-    const topicNames = task.tags.slice(0, 2).map(tag => {
+    const topicNames = task.tags.slice(0, 3).map(tag => {
       const topic = DATA.topics.find(t => t.id === tag.topic);
       const label = topic ? topic.name : tag.topic;
       const detail = tag.subtopic ? ` · ${tag.subtopic}` : '';
+      const manual = tag.source === 'manual_admin' ? 'Ручная разметка администратора' : '';
       const confidence = tag.confidence ? `Уверенность: ${Math.round(tag.confidence * 100)}%` : '';
-      return `<span class="task-tag" title="${escapeAttr(confidence)}">${escapeHtml(label)}${escapeHtml(detail)}</span>`;
+      return `<span class="task-tag${manual ? ' manual-tag' : ''}" title="${escapeAttr([manual, confidence].filter(Boolean).join(' · '))}">${escapeHtml(label)}${escapeHtml(detail)}</span>`;
     }).join('');
 
     const noTopic = !topicNames ? '<span class="task-tag muted-tag">Без тематической метки</span>' : '';
     const kes = task.liveKesCode ? `КЭС ${task.liveKesCode}` : 'КЭС —';
+    const editButton = appMode === 'admin'
+      ? `<button class="topic-edit-button" type="button" data-edit-topic="${escapeAttr(key)}" title="Изменить темы и подтемы">✎</button>`
+      : '';
+    const manualMarker = task._override
+      ? `<span class="manual-marker" title="Есть ручная тематическая правка">ручная</span>`
+      : '';
 
     return `<article class="task-card">
       <div class="task-main">
         <a class="task-link" href="${escapeAttr(task.url)}" target="_blank" rel="noopener noreferrer" title="Открыть исходное задание на ФИПИ">${escapeHtml(task.fipiId)} ↗</a>
-        <button class="status-toggle" type="button" data-task="${escapeAttr(key)}" data-status="${escapeAttr(status)}" title="Статус: ${escapeAttr(statusLabel(status))}. Нажмите, чтобы переключить."></button>
+        <div class="task-actions">
+          ${editButton}
+          <button class="status-toggle" type="button" data-task="${escapeAttr(key)}" data-status="${escapeAttr(status)}" title="Статус: ${escapeAttr(statusLabel(status))}. Нажмите, чтобы переключить."></button>
+        </div>
       </div>
-      <div class="task-title">${escapeHtml(kes)}</div>
+      <div class="task-title">${escapeHtml(kes)} ${manualMarker}</div>
       <div class="task-tags">${topicNames}${noTopic}</div>
     </article>`;
   }
@@ -328,6 +389,9 @@
 
     document.querySelectorAll('.status-toggle').forEach(button => {
       button.addEventListener('click', () => setStatus(button.dataset.task, nextStatus(button.dataset.status)));
+    });
+    document.querySelectorAll('[data-edit-topic]').forEach(button => {
+      button.addEventListener('click', () => openTopicEditor(button.dataset.editTopic));
     });
   }
 
@@ -446,6 +510,206 @@
     return cards;
   }
 
+
+  async function fetchTopicOverrides() {
+    const map = new Map();
+    for (let from = 0; ; from += CATALOG_PAGE_SIZE) {
+      const to = from + CATALOG_PAGE_SIZE - 1;
+      const { data, error } = await supabaseClient
+        .from('task_topic_overrides')
+        .select('fipi_id,mode,manual_tags,note,updated_at,updated_by')
+        .order('fipi_id', { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      const page = data || [];
+      for (const row of page) map.set(row.fipi_id, row);
+      if (page.length < CATALOG_PAGE_SIZE) break;
+    }
+    return map;
+  }
+
+  function editorTopics() {
+    return DATA.topics.filter(t => !['all', UNTAGGED_TOPIC_ID].includes(t.id));
+  }
+
+  function subtopicsForTopic(topicId) {
+    const configured = DATA.subtopics?.[topicId];
+    if (Array.isArray(configured)) return configured.slice();
+
+    const values = new Set();
+    for (const task of tasks) {
+      for (const tag of [...(task._autoTags || []), ...(task.tags || [])]) {
+        if (tag.topic === topicId && tag.subtopic) values.add(tag.subtopic);
+      }
+    }
+    return [...values].sort((a, b) => a.localeCompare(b, 'ru'));
+  }
+
+  function makeTopicRow(topicId = '', subtopic = '') {
+    const row = document.createElement('div');
+    row.className = 'topic-editor-row';
+
+    const topicSelect = document.createElement('select');
+    topicSelect.className = 'topic-editor-topic';
+    topicSelect.innerHTML = ['<option value="">Выберите тему</option>']
+      .concat(editorTopics().map(t => `<option value="${escapeAttr(t.id)}">${escapeHtml(t.name)}</option>`))
+      .join('');
+    topicSelect.value = topicId || '';
+
+    const subtopicSelect = document.createElement('select');
+    subtopicSelect.className = 'topic-editor-subtopic';
+
+    const fillSubtopics = (selected = '') => {
+      const values = topicSelect.value ? subtopicsForTopic(topicSelect.value) : [];
+      subtopicSelect.innerHTML = ['<option value="">Без подтемы</option>']
+        .concat(values.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`))
+        .join('');
+      subtopicSelect.value = values.includes(selected) ? selected : '';
+      subtopicSelect.disabled = !topicSelect.value;
+    };
+
+    fillSubtopics(subtopic || '');
+    topicSelect.addEventListener('change', () => fillSubtopics(''));
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'topic-row-remove';
+    remove.textContent = '×';
+    remove.title = 'Убрать эту тему';
+    remove.addEventListener('click', () => {
+      if (el.topicOverrideRows.children.length > 1) row.remove();
+      else {
+        topicSelect.value = '';
+        fillSubtopics('');
+      }
+    });
+
+    row.append(topicSelect, subtopicSelect, remove);
+    return row;
+  }
+
+  function renderAutoTagsReference(task) {
+    const autoTags = task?._autoTags || [];
+    if (!autoTags.length) {
+      el.topicEditorAutoTags.innerHTML = '<span class="task-tag muted-tag">Без автоматической тематической метки</span>';
+      return;
+    }
+    el.topicEditorAutoTags.innerHTML = autoTags.map(tag => {
+      const meta = DATA.topics.find(t => t.id === tag.topic);
+      const label = meta?.name || tag.topic;
+      const detail = tag.subtopic ? ` · ${tag.subtopic}` : '';
+      return `<span class="task-tag">${escapeHtml(label)}${escapeHtml(detail)}</span>`;
+    }).join('');
+  }
+
+  function openTopicEditor(taskId) {
+    if (appMode !== 'admin') return;
+    const task = tasks.find(t => t.fipiId === taskId);
+    if (!task) return;
+
+    editingTaskId = taskId;
+    el.topicEditorTaskId.textContent = taskId;
+    renderAutoTagsReference(task);
+
+    const override = overrideMap.get(taskId) || null;
+    el.topicOverrideMode.value = override?.mode || (task._autoTags?.length ? 'add' : 'replace');
+    el.topicOverrideNote.value = override?.note || '';
+    el.topicOverrideRows.innerHTML = '';
+
+    const manualTags = Array.isArray(override?.manual_tags) ? override.manual_tags : [];
+    if (manualTags.length) {
+      for (const tag of manualTags) {
+        el.topicOverrideRows.appendChild(makeTopicRow(tag.topic_id || tag.topic || '', tag.subtopic || ''));
+      }
+    } else {
+      el.topicOverrideRows.appendChild(makeTopicRow());
+    }
+
+    el.resetTopicOverrideButton.disabled = !override;
+    if (typeof el.topicDialog.showModal === 'function') el.topicDialog.showModal();
+  }
+
+  function collectManualTags() {
+    const rows = [...el.topicOverrideRows.querySelectorAll('.topic-editor-row')];
+    const tags = [];
+    const seen = new Set();
+
+    for (const row of rows) {
+      const topicId = row.querySelector('.topic-editor-topic')?.value || '';
+      const subtopic = row.querySelector('.topic-editor-subtopic')?.value || '';
+      if (!topicId) continue;
+      const key = `${topicId}\u0000${subtopic}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const meta = DATA.topics.find(t => t.id === topicId);
+      tags.push({
+        topic_id: topicId,
+        topic: meta?.name || topicId,
+        subtopic: subtopic || null,
+        source: 'manual_admin'
+      });
+    }
+    return tags;
+  }
+
+  async function saveTopicOverride() {
+    if (appMode !== 'admin' || !editingTaskId || !currentUser) return;
+
+    const manualTags = collectManualTags();
+    const payload = {
+      fipi_id: editingTaskId,
+      mode: el.topicOverrideMode.value === 'replace' ? 'replace' : 'add',
+      manual_tags: manualTags,
+      note: el.topicOverrideNote.value.trim() || null,
+      updated_by: currentUser.id,
+      updated_at: new Date().toISOString()
+    };
+
+    el.saveTopicOverrideButton.disabled = true;
+    try {
+      const { data, error } = await supabaseClient
+        .from('task_topic_overrides')
+        .upsert(payload, { onConflict: 'fipi_id' })
+        .select('fipi_id,mode,manual_tags,note,updated_at,updated_by')
+        .single();
+
+      if (error) throw error;
+      overrideMap.set(data.fipi_id, data);
+      setTasks(baseCards, overrideMap, false);
+      el.topicDialog.close();
+      setBadge('live', 'ADMIN · SECURE', 'Ручная тематическая правка сохранена');
+    } catch (error) {
+      console.error('Topic override save failed:', error);
+      alert(`Не удалось сохранить разметку: ${error?.message || error}`);
+    } finally {
+      el.saveTopicOverrideButton.disabled = false;
+    }
+  }
+
+  async function resetTopicOverride() {
+    if (appMode !== 'admin' || !editingTaskId || !currentUser) return;
+    if (!overrideMap.has(editingTaskId)) return;
+
+    el.resetTopicOverrideButton.disabled = true;
+    try {
+      const { error } = await supabaseClient
+        .from('task_topic_overrides')
+        .delete()
+        .eq('fipi_id', editingTaskId);
+
+      if (error) throw error;
+      overrideMap.delete(editingTaskId);
+      setTasks(baseCards, overrideMap, false);
+      el.topicDialog.close();
+      setBadge('live', 'ADMIN · SECURE', 'Ручная правка сброшена');
+    } catch (error) {
+      console.error('Topic override reset failed:', error);
+      alert(`Не удалось сбросить разметку: ${error?.message || error}`);
+    } finally {
+      el.resetTopicOverrideButton.disabled = false;
+    }
+  }
+
   async function fetchProfile(userId) {
     const { data, error } = await supabaseClient
       .from('profiles')
@@ -484,6 +748,9 @@
   function showGate(mode = 'gate', message = '', kind = 'info') {
     appMode = mode;
     tasks = [];
+    baseCards = [];
+    overrideMap = new Map();
+    editingTaskId = null;
     DATA.tasks = [];
     records = {};
     el.appShell.classList.add('hidden');
@@ -519,7 +786,7 @@
       }
 
       records = loadDemoRecords();
-      setTasks(cards);
+      setTasks(cards, new Map());
       enterApp('demo');
     } catch (error) {
       console.error('DEMO load failed:', error);
@@ -553,12 +820,15 @@
         return;
       }
 
-      const cards = await fetchFullCatalog();
+      const [cards, overrides] = await Promise.all([
+        fetchFullCatalog(),
+        fetchTopicOverrides()
+      ]);
       if (cards.length !== 1735) {
         console.warn(`Protected catalog returned ${cards.length} cards; expected 1735.`);
       }
       records = loadCloudCache(user.id);
-      setTasks(cards);
+      setTasks(cards, overrides);
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
       await loadCloudStatuses();
     } catch (error) {
@@ -659,6 +929,14 @@
   el.signOutButton.addEventListener('click', leaveCurrentMode);
   el.signIn.addEventListener('click', signIn);
   el.password.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+
+  el.addTopicRowButton.addEventListener('click', () => {
+    el.topicOverrideRows.appendChild(makeTopicRow());
+  });
+  el.saveTopicOverrideButton.addEventListener('click', saveTopicOverride);
+  el.resetTopicOverrideButton.addEventListener('click', resetTopicOverride);
+  el.closeTopicDialogButton.addEventListener('click', () => el.topicDialog.close());
+
   document.addEventListener('visibilitychange', refreshWhenVisible);
   window.addEventListener('online', () => {
     if (currentUser && (appMode === 'admin' || appMode === 'teacher')) loadCloudStatuses();

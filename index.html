@@ -132,7 +132,7 @@
     </section>
 
     <section class="prototype-note">
-      <strong>v0.9 · FIPI Navigator.</strong>
+      <strong>v0.9.1 TEST · FIPI Navigator.</strong>
       <span>Подключён защищённый каталог: 1735 заданий ФИПИ. Темы и подтемы работают по multi-label меткам.</span>
     </section>
   </main>
@@ -160,6 +160,47 @@
       <button id="signInButton" class="button primary wide" type="button">Войти</button>
       <p class="dialog-note">Нет доступа? Обратитесь к администратору Navigator.</p>
     </form>
+  </dialog>
+
+
+  <dialog id="topicDialog">
+    <div class="dialog-card topic-dialog-card">
+      <button id="closeTopicDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ADMIN · TOPIC EDITOR</span>
+      <h3>Темы задания <span id="topicEditorTaskId"></span></h3>
+      <p class="topic-editor-help">Автоматическая разметка сохраняется отдельно. Здесь можно добавить темы к ней или заменить её в Navigator.</p>
+
+      <div class="topic-auto-box">
+        <span>Автоматическая разметка</span>
+        <div id="topicEditorAutoTags" class="task-tags"></div>
+      </div>
+
+      <label>
+        <span>Режим ручной правки</span>
+        <select id="topicOverrideMode">
+          <option value="add">Добавить к автоматической разметке</option>
+          <option value="replace">Заменить разметку в Navigator</option>
+        </select>
+      </label>
+
+      <div class="topic-editor-section">
+        <div class="topic-editor-section-head">
+          <span>Ручные темы и подтемы</span>
+          <button id="addTopicRowButton" class="button secondary compact" type="button">+ Добавить тему</button>
+        </div>
+        <div id="topicOverrideRows" class="topic-editor-rows"></div>
+      </div>
+
+      <label>
+        <span>Заметка администратора — необязательно</span>
+        <textarea id="topicOverrideNote" rows="2" placeholder="Например: прослушала аудио — тема Путешествия"></textarea>
+      </label>
+
+      <div class="topic-editor-actions">
+        <button id="resetTopicOverrideButton" class="button ghost" type="button">Сбросить ручную правку</button>
+        <button id="saveTopicOverrideButton" class="button primary" type="button">Сохранить</button>
+      </div>
+    </div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

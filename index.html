@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>OGE Lexical Navigator · FIPI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <a class="brand-logo-link" href="https://vk.ru/dreamteamenglish" target="_blank" rel="noopener noreferrer" aria-label="Копилочка Английского — VK">
+        <img id="brandLogo" class="brand-logo" src="assets/brand-logo.png" alt="Копилочка Английского" />
+      </a>
+      <div>
+        <div class="eyebrow">TEACHER WORKSPACE</div>
+        <h1>OGE Lexical Navigator</h1>
+        <p>Тематический навигатор по открытому банку заданий ФИПИ · English</p>
+      </div>
+    </div>
+
+    <div class="auth-area">
+      <span id="cloudBadge" class="cloud-badge protected">PROTECTED</span>
+      <button id="headerLoginButton" class="button secondary hidden" type="button">Войти</button>
+      <button id="signOutButton" class="button ghost hidden" type="button">Выйти</button>
+    </div>
+  </header>
+
+  <section id="accessGate" class="access-gate">
+    <div class="access-card">
+      <span class="gold-kicker">PROTECTED NAVIGATOR</span>
+      <h2>Тематический поиск по заданиям ОГЭ ФИПИ</h2>
+      <p>Полный каталог доступен только приглашённым пользователям. Для знакомства с возможностями Navigator можно открыть ограниченную DEMO-версию.</p>
+
+      <div id="accessMessage" class="access-message hidden"></div>
+
+      <div class="access-actions">
+        <button id="openLoginButton" class="button primary access-main-button" type="button">Войти</button>
+        <button id="openDemoButton" class="button secondary access-main-button" type="button">Попробовать DEMO</button>
+      </div>
+      <p class="access-note">Самостоятельная регистрация отключена. Полный доступ выдаётся только по приглашению администратора.</p>
+    </div>
+  </section>
+
+  <main id="appShell" class="shell hidden">
+    <section class="hero-card">
+      <div class="hero-copy">
+        <span id="modeKicker" class="gold-kicker">LEXICAL FIRST</span>
+        <h2>Выберите тему — все задания уже разложены по формату ОГЭ.</h2>
+        <p>Одна тема может вести к нескольким заданиям ФИПИ из разных разделов. Используйте тему, подтему, статус и быстрый поиск.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><span id="visibleCount">0</span><small>найдено</small></div>
+        <div class="stat"><span id="viewedCount">0</span><small>просмотрено</small></div>
+        <div class="stat"><span id="usedCount">0</span><small>использовано</small></div>
+      </div>
+    </section>
+
+    <section class="filters-card">
+      <div class="filter-grid">
+        <label>
+          <span>Тема</span>
+          <select id="topicSelect"></select>
+        </label>
+        <label>
+          <span>Подтема</span>
+          <select id="subtopicSelect"></select>
+        </label>
+        <label>
+          <span>Статус</span>
+          <select id="statusSelect">
+            <option value="all">Все</option>
+            <option value="new">Новые</option>
+            <option value="viewed">Просмотренные</option>
+            <option value="used">Использованные</option>
+          </select>
+        </label>
+        <label class="search-field">
+          <span>Быстрый поиск</span>
+          <input id="searchInput" type="search" placeholder="FIPI ID, КЭС, тема, ключевое слово…" />
+        </label>
+      </div>
+
+      <div class="selection-line">
+        <div>
+          <span class="selection-label">Сейчас:</span>
+          <strong id="selectionTitle">Все темы</strong>
+        </div>
+        <button id="resetButton" class="link-button" type="button">Сбросить фильтры</button>
+      </div>
+    </section>
+
+    <section class="matrix-card">
+      <div class="matrix-toolbar">
+        <div>
+          <span class="gold-kicker">EXAM MATRIX</span>
+          <h3>Задания по разделам экзамена</h3>
+        </div>
+        <div class="legend" aria-label="Легенда статусов">
+          <span><i class="dot new"></i> новое</span>
+          <span><i class="dot viewed"></i> просмотрено</span>
+          <span><i class="dot used"></i> использовано</span>
+        </div>
+      </div>
+
+      <div class="matrix-scroll">
+        <div id="matrix" class="matrix"></div>
+      </div>
+
+      <div id="emptyState" class="empty hidden">
+        <div class="empty-icon">◇</div>
+        <h4>В этой выборке нет заданий</h4>
+        <p>Попробуйте изменить тему, подтему, статус или строку поиска.</p>
+      </div>
+    </section>
+
+    <section class="info-grid single-info">
+      <article class="info-card">
+        <span class="gold-kicker">AUTOMATION</span>
+        <h3>Автоклассификация</h3>
+        <p>Каталог уже классифицирован по тематическому содержанию ФИПИ 5–9. Одно задание может одновременно относиться к нескольким подходящим темам и подтемам.</p>
+        <div class="confidence-demo">
+          <span>Путешествия <b>96%</b></span>
+          <span>Транспорт <b>91%</b></span>
+          <span>Страны и культура <b>68%</b></span>
+        </div>
+      </article>
+    </section>
+
+    <section class="prototype-note">
+      <strong>v0.9 · FIPI Navigator.</strong>
+      <span>Подключён защищённый каталог: 1735 заданий ФИПИ. Темы и подтемы работают по multi-label меткам.</span>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Тематический навигатор по открытому банку заданий ОГЭ ФИПИ · English · <span id="footerYear"></span> · </span>
+    <a href="https://vk.ru/dreamteamenglish" target="_blank" rel="noopener noreferrer">Копилочка Английского</a>
+  </footer>
+
+  <dialog id="authDialog">
+    <form method="dialog" class="dialog-card" id="authForm">
+      <button class="dialog-close" value="cancel" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">INVITED ACCESS</span>
+      <h3>Вход</h3>
+      <p id="authHint">Введите email и пароль приглашённого аккаунта.</p>
+      <label>
+        <span>Email</span>
+        <input id="emailInput" type="email" autocomplete="email" placeholder="teacher@example.com" />
+      </label>
+      <label>
+        <span>Пароль</span>
+        <input id="passwordInput" type="password" autocomplete="current-password" placeholder="••••••••" />
+      </label>
+      <div id="authError" class="auth-error hidden"></div>
+      <button id="signInButton" class="button primary wide" type="button">Войти</button>
+      <p class="dialog-note">Нет доступа? Обратитесь к администратору Navigator.</p>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

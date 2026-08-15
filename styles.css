@@ -455,6 +455,18 @@ select:disabled { opacity: .55; cursor: not-allowed; }
   max-height: min(90vh, 900px);
   overflow: auto;
 }
+.admin-stats-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(3,10,29,.2); }
+.stats-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.stats-controls select, .stats-controls input { width: auto; min-height: 36px; font-size: 11px; }
+.stats-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 14px; }
+.stats-summary div { padding: 10px; border-radius: 12px; text-align: center; background: rgba(20,52,111,.25); }
+.stats-summary strong { display: block; color: var(--gold-2); font: 24px Georgia,serif; }
+.stats-summary span { color: var(--muted); font-size: 10px; }
+.stats-chart { width: 100%; min-height: 210px; margin-top: 12px; overflow: hidden; }
+.stats-chart svg { width: 100%; height: auto; display: block; }
+.stats-axis { stroke: rgba(122,163,255,.25); }
+.stats-line { fill: none; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.stats-dot { fill: var(--gold-2); }
 .admin-panel-help { margin-bottom: 18px !important; }
 
 .admin-section-label {
@@ -564,6 +576,7 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 }
 
 @media (max-width: 680px) {
+  .stats-summary { grid-template-columns: 1fr 1fr; }
   .admin-demo-panel,
   .admin-users-head,
   .admin-user-row {

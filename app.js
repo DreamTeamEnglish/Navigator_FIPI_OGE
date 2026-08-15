@@ -60,6 +60,7 @@
     adminUserStats: document.querySelector('#adminUserStats'),
     adminUsersList: document.querySelector('#adminUsersList'),
     refreshAdminUsersButton: document.querySelector('#refreshAdminUsersButton'),
+    statsPeriodSelect: document.querySelector('#statsPeriodSelect'), statsFromDate: document.querySelector('#statsFromDate'), statsToDate: document.querySelector('#statsToDate'), refreshStatsButton: document.querySelector('#refreshStatsButton'), statsPeriodLabel: document.querySelector('#statsPeriodLabel'), statsVisits: document.querySelector('#statsVisits'), statsUnique: document.querySelector('#statsUnique'), statsEmail: document.querySelector('#statsEmail'), statsDonut: document.querySelector('#statsDonut'), statsChart: document.querySelector('#statsChart'),
 
     userAccessDialog: document.querySelector('#userAccessDialog'),
     closeUserAccessDialogButton: document.querySelector('#closeUserAccessDialogButton'),
@@ -100,6 +101,7 @@
   let toastTimer = null;
   let donutUserId = null;
   let adminDonutSessions = [];
+  let adminStatsUsers = new Map();
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
@@ -1003,6 +1005,15 @@
     }
   }
 
+  async function recordEmailAccess(accessLevel) {
+    if (!supabaseClient || !currentUser) return;
+    const key = `oge-navigator-access-session:${currentUser.id}`;
+    let sessionId = sessionStorage.getItem(key);
+    if (!sessionId) { sessionId = crypto.randomUUID(); sessionStorage.setItem(key, sessionId); }
+    const { error } = await supabaseClient.rpc('record_navigator_access', { p_session_id: sessionId, p_access_level: accessLevel });
+    if (error) console.error('Access event save failed:', error);
+  }
+
   async function activateAuthenticatedSession(user) {
     currentUser = user;
     currentProfile = null;
@@ -1039,6 +1050,7 @@
         if (!cards.length) throw new Error('Персональная DEMO-подборка недоступна.');
         setTasks(cards, new Map());
         enterApp('demo_user');
+        await recordEmailAccess('demo');
         await loadCloudStatuses();
         return;
       }
@@ -1057,6 +1069,7 @@
       }
       setTasks(cards, overrides);
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
+      await recordEmailAccess(profile.role === 'admin' ? 'admin' : 'full');
       await loadCloudStatuses();
     } catch (error) {
       console.error('Access activation failed:', error);
@@ -1128,6 +1141,34 @@
     return Boolean(data);
   }
 
+  function statsRange() {
+    const to = new Date();
+    const days = Number(el.statsPeriodSelect.value) || 30;
+    let from = new Date(to.getTime() - days * 86400000);
+    if (el.statsPeriodSelect.value === 'custom') {
+      if (el.statsFromDate.value) from = new Date(`${el.statsFromDate.value}T00:00:00`);
+      if (el.statsToDate.value) to.setTime(new Date(`${el.statsToDate.value}T23:59:59.999`).getTime());
+    }
+    return { from, to };
+  }
+
+  function renderStatsChart(rows = []) {
+    if (!rows.length) { el.statsChart.innerHTML = '<div class="admin-users-empty">Данных пока нет.</div>'; return; }
+    const w=760,h=210,px=34,py=24,max=Math.max(1,...rows.map(r=>Number(r.visits)||0));
+    const pts=rows.map((r,i)=>({x:px+(rows.length===1?0:i*(w-px*2)/(rows.length-1)),y:h-py-(Number(r.visits)||0)*(h-py*2)/max,v:Number(r.visits)||0,d:String(r.day)}));
+    el.statsChart.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img"><line x1="${px}" y1="${h-py}" x2="${w-px}" y2="${h-py}" class="stats-axis"/><polyline points="${pts.map(p=>`${p.x},${p.y}`).join(' ')}" class="stats-line"/>${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" class="stats-dot"><title>${escapeHtml(p.d)}: ${p.v}</title></circle>`).join('')}</svg>`;
+  }
+
+  async function refreshStatistics() {
+    if (appMode !== 'admin') return;
+    const {from,to}=statsRange();
+    el.statsPeriodLabel.textContent=`${from.toLocaleDateString('ru-RU')} — ${to.toLocaleDateString('ru-RU')}`;
+    const {data,error}=await supabaseClient.rpc('admin_navigator_stats',{p_from:from.toISOString(),p_to:to.toISOString()});
+    if(error) throw error; const s=data||{};
+    el.statsVisits.textContent=s.visits||0; el.statsUnique.textContent=s.unique_users||0; el.statsEmail.textContent=s.email_visits||0; el.statsDonut.textContent=s.donut_visits||0;
+    adminStatsUsers=new Map((s.users||[]).map(r=>[`${r.user_kind}:${r.user_key}`,r])); renderStatsChart(s.daily||[]);
+  }
+
   function renderAdminUsers() {
     const rows = adminProfiles;
     const active = rows.filter(p => p.status === 'active' && !isProfileExpired(p)).length;
@@ -1143,12 +1184,14 @@
 
     el.adminUsersList.innerHTML = rows.map(profile => {
       const self = profile.id === currentUser?.id;
+      const activity = adminStatsUsers.get(`email:${profile.id}`);
       const expired = isProfileExpired(profile);
       const meta = [
         profile.role === 'admin' ? 'ADMIN' : 'TEACHER',
         accessDisplay(profile.access_level),
         statusDisplay(profile.status),
-        expired ? 'EXPIRED' : formatAccessExpiry(profile.access_expires_at)
+        expired ? 'EXPIRED' : formatAccessExpiry(profile.access_expires_at),
+        `входов за период: ${activity?.login_count || 0}`
       ].join(' · ');
 
       let actions = '<span class="admin-self-note">Это ваш аккаунт</span>';
@@ -1185,7 +1228,8 @@
         const firstSeen = row.first_seen_at ? new Date(row.first_seen_at).toLocaleString('ru-RU') : '—';
         const verified = row.last_verified_at ? new Date(row.last_verified_at).toLocaleString('ru-RU') : '—';
         const session = row.session_expires_at ? ` · сессия до ${new Date(row.session_expires_at).toLocaleString('ru-RU')}` : ' · без активной сессии';
-        return `<article class="admin-user-row"><div class="admin-user-main"><strong>${escapeHtml(name)} · VK ID ${escapeHtml(row.vk_user_id)}</strong><span>DONUT · ${escapeHtml(status)} · впервые ${escapeHtml(firstSeen)} · проверен ${escapeHtml(verified)}${escapeHtml(session)}</span></div><div class="admin-user-actions">${row.session_expires_at ? `<button class="button ghost compact" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="button ${row.blocked ? 'secondary' : 'ghost danger-soft'} compact" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
+        const activity = adminStatsUsers.get(`donut:${row.vk_user_id}`);
+        return `<article class="admin-user-row"><div class="admin-user-main"><strong>${escapeHtml(name)} · VK ID ${escapeHtml(row.vk_user_id)}</strong><span>DONUT · ${escapeHtml(status)} · впервые ${escapeHtml(firstSeen)} · проверен ${escapeHtml(verified)}${escapeHtml(session)} · входов за период: ${escapeHtml(activity?.login_count || 0)}</span></div><div class="admin-user-actions">${row.session_expires_at ? `<button class="button ghost compact" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="button ${row.blocked ? 'secondary' : 'ghost danger-soft'} compact" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
       }
       ).join('')}`);
       el.adminUsersList.querySelectorAll('[data-donut-revoke]').forEach(button => {
@@ -1228,7 +1272,8 @@
   async function openAdminPanel() {
     if (appMode !== 'admin') return;
     if (typeof el.adminAccessDialog.showModal === 'function') el.adminAccessDialog.showModal();
-    await refreshAdminPanel();
+    await Promise.all([refreshAdminPanel(), refreshStatistics()]);
+    renderAdminUsers();
   }
 
   async function toggleDemoFromAdmin() {
@@ -1390,6 +1435,7 @@
       return;
     }
     if (supabaseClient && currentUser) {
+      sessionStorage.removeItem(`oge-navigator-access-session:${currentUser.id}`);
       const { error } = await supabaseClient.auth.signOut();
       if (error) console.error('Sign out failed:', error);
       return;
@@ -1463,6 +1509,12 @@
     startDemo();
   });
   el.refreshAdminUsersButton.addEventListener('click', refreshAdminPanel);
+  el.refreshStatsButton.addEventListener('click', async () => { await refreshStatistics(); renderAdminUsers(); });
+  el.statsPeriodSelect.addEventListener('change', () => {
+    const custom = el.statsPeriodSelect.value === 'custom';
+    el.statsFromDate.classList.toggle('hidden', !custom);
+    el.statsToDate.classList.toggle('hidden', !custom);
+  });
 
   el.closeUserAccessDialogButton.addEventListener('click', () => el.userAccessDialog.close());
   el.cancelUserAccessButton.addEventListener('click', () => el.userAccessDialog.close());

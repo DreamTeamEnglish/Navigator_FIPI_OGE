@@ -393,3 +393,167 @@ select:disabled { opacity: .55; cursor: not-allowed; }
   .topic-editor-actions { flex-direction: column-reverse; }
   .topic-editor-actions .button { width: 100%; }
 }
+
+
+/* =========================================================
+   PROTECTED v0.9.2 TEST — ACCESS ADMIN PANEL
+   ========================================================= */
+
+.admin-contact-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: #9fb8ec;
+  text-decoration: none;
+  font-size: 12px;
+  transition: .18s ease;
+}
+.admin-contact-link:hover { color: var(--gold-2); text-decoration: underline; }
+.compact-contact { margin-top: 0; font-size: 11px; }
+
+#adminAccessDialog,
+#userAccessDialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+}
+#adminAccessDialog::backdrop,
+#userAccessDialog::backdrop {
+  background: rgba(0, 4, 15, .82);
+  backdrop-filter: blur(10px);
+}
+
+.admin-access-card {
+  width: min(920px, calc(100vw - 28px));
+  max-height: min(90vh, 900px);
+  overflow: auto;
+}
+.admin-panel-help { margin-bottom: 18px !important; }
+
+.admin-section-label {
+  display: block;
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.admin-demo-panel,
+.admin-users-panel {
+  border: 1px solid rgba(122,163,255,.16);
+  background: rgba(11,26,61,.46);
+  border-radius: 16px;
+  padding: 16px;
+}
+.admin-users-panel { margin-top: 14px; }
+
+.admin-demo-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.admin-demo-state-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.admin-demo-state-line > span { color: var(--muted); font-size: 12px; }
+.demo-state { font-size: 14px; }
+.demo-state.on { color: var(--gold-2); }
+.demo-state.off { color: #91a2c7; }
+.admin-demo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.admin-users-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.admin-user-stats { color: #8fa4cf; font-size: 11px; }
+
+.admin-users-list { display: grid; gap: 8px; }
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(122,163,255,.12);
+  background: rgba(4,13,35,.45);
+}
+.admin-user-row.self {
+  border-color: rgba(229,189,98,.20);
+  background: rgba(229,189,98,.045);
+}
+.admin-user-main { min-width: 0; }
+.admin-user-main strong {
+  display: block;
+  color: #eef4ff;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.admin-user-main span {
+  display: block;
+  margin-top: 4px;
+  color: #8195c0;
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+.admin-user-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+.admin-self-note { color: #a98d50; font-size: 11px; }
+.admin-users-empty { color: #8799bf; font-size: 12px; padding: 16px 4px; text-align: center; }
+.error-text { color: #ffaaa7; }
+.danger-soft { color: #ffb1ae !important; border-color: rgba(235,90,90,.22) !important; }
+
+.user-access-card { width: min(500px, calc(100vw - 30px)); }
+.user-access-email {
+  color: var(--gold-2) !important;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.user-access-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  max-width: min(520px, calc(100vw - 30px));
+  padding: 11px 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(229,189,98,.32);
+  background: rgba(7,20,50,.96);
+  color: #f4d889;
+  box-shadow: 0 18px 50px rgba(0,0,0,.42);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .admin-demo-panel,
+  .admin-users-head,
+  .admin-user-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .admin-demo-actions,
+  .admin-user-actions,
+  .user-access-actions {
+    width: 100%;
+  }
+  .admin-demo-actions .button,
+  .admin-user-actions .button,
+  .user-access-actions .button {
+    flex: 1;
+  }
+}

@@ -30,13 +30,22 @@
     return out;
   }
 
+  function randomState(length = 40) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  }
+
   function prepareVkId() {
     const VKID = window.VKIDSDK;
     if (!VKID?.Config?.init || !VKID?.Auth?.login) {
       throw new Error('VK ID SDK не загрузился. Обновите страницу и попробуйте снова.');
     }
 
-    const state = randomUrlSafe(40);
+    const state = randomState(40);
     const codeVerifier = randomUrlSafe(72);
 
     localStorage.setItem(`${STORAGE_PREFIX}state`, state);

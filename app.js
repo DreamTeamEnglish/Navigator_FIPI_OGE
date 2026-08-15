@@ -31,6 +31,7 @@
     brandLogo: document.querySelector('#brandLogo'),
     footerYear: document.querySelector('#footerYear'),
     toast: document.querySelector('#toast'),
+    copyAdminTextButton: document.querySelector('#copyAdminTextButton'),
 
     topic: document.querySelector('#topicSelect'),
     subtopic: document.querySelector('#subtopicSelect'),
@@ -1451,6 +1452,7 @@
   document.querySelectorAll('[data-admin-contact]').forEach(link => {
     link.addEventListener('click', () => copyAdminContactText());
   });
+  el.copyAdminTextButton?.addEventListener('click', copyAdminContactText);
 
   el.addTopicRowButton.addEventListener('click', () => {
     el.topicOverrideRows.appendChild(makeTopicRow());

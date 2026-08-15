@@ -25,6 +25,7 @@
 
     <div class="auth-area">
       <span id="cloudBadge" class="cloud-badge protected">PROTECTED</span>
+      <button id="adminAccessButton" class="button secondary hidden" type="button">⚙ Управление доступом</button>
       <button id="headerLoginButton" class="button secondary hidden" type="button">Войти</button>
       <button id="signOutButton" class="button ghost hidden" type="button">Выйти</button>
     </div>
@@ -34,15 +35,19 @@
     <div class="access-card">
       <span class="gold-kicker">PROTECTED NAVIGATOR</span>
       <h2>Тематический поиск по заданиям ОГЭ ФИПИ</h2>
-      <p>Полный каталог доступен только приглашённым пользователям. Для знакомства с возможностями Navigator можно открыть ограниченную DEMO-версию.</p>
+      <p>Полный каталог доступен участникам VK Donut или по приглашению администратора. Для знакомства с возможностями Navigator можно открыть ограниченную DEMO-версию.</p>
 
       <div id="accessMessage" class="access-message hidden"></div>
 
       <div class="access-actions">
+        <button id="openDonutButton" class="button primary access-main-button" type="button">Войти через VK Donut</button>
         <button id="openLoginButton" class="button primary access-main-button" type="button">Войти</button>
         <button id="openDemoButton" class="button secondary access-main-button" type="button">Попробовать DEMO</button>
       </div>
-      <p class="access-note">Самостоятельная регистрация отключена. Полный доступ выдаётся только по приглашению администратора.</p>
+      <p class="access-note">Самостоятельная регистрация по email отключена.</p>
+      <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
+        ✉ Нужен доступ? Напишите администратору
+      </a>
     </div>
   </section>
 
@@ -132,7 +137,7 @@
     </section>
 
     <section class="prototype-note">
-      <strong>v0.9.1 TEST · FIPI Navigator.</strong>
+      <strong>v0.9.2 TEST · FIPI Navigator.</strong>
       <span>Подключён защищённый каталог: 1735 заданий ФИПИ. Темы и подтемы работают по multi-label меткам.</span>
     </section>
   </main>
@@ -158,7 +163,11 @@
       </label>
       <div id="authError" class="auth-error hidden"></div>
       <button id="signInButton" class="button primary wide" type="button">Войти</button>
-      <p class="dialog-note">Нет доступа? Обратитесь к администратору Navigator.</p>
+      <p class="dialog-note">
+        <a class="admin-contact-link compact-contact" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
+          ✉ Нужен доступ? Напишите администратору
+        </a>
+      </p>
     </form>
   </dialog>
 
@@ -203,7 +212,92 @@
     </div>
   </dialog>
 
+
+  <dialog id="adminAccessDialog">
+    <div class="dialog-card admin-access-card">
+      <button id="closeAdminAccessDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ADMIN · ACCESS CONTROL</span>
+      <h3>⚙ Управление доступом</h3>
+      <p class="admin-panel-help">Управление DEMO и уже существующими пользователями. Приглашения по email подключим отдельным безопасным этапом.</p>
+
+      <section class="admin-demo-panel">
+        <div>
+          <span class="admin-section-label">DEMO</span>
+          <div class="admin-demo-state-line">
+            <strong id="adminDemoState">Проверяю…</strong>
+            <span>44 демонстрационные карточки</span>
+          </div>
+        </div>
+        <div class="admin-demo-actions">
+          <button id="toggleDemoButton" class="button secondary" type="button">Включить</button>
+          <button id="previewDemoButton" class="button ghost" type="button">Открыть DEMO</button>
+        </div>
+      </section>
+
+      <section class="admin-users-panel">
+        <div class="admin-users-head">
+          <div>
+            <span class="admin-section-label">ПОЛЬЗОВАТЕЛИ</span>
+            <div id="adminUserStats" class="admin-user-stats">Загрузка…</div>
+          </div>
+          <button id="refreshAdminUsersButton" class="button ghost compact" type="button">Обновить</button>
+        </div>
+        <div id="adminUsersList" class="admin-users-list"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="userAccessDialog">
+    <div class="dialog-card user-access-card">
+      <button id="closeUserAccessDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ADMIN · USER ACCESS</span>
+      <h3>Доступ пользователя</h3>
+      <p id="userAccessEmail" class="user-access-email"></p>
+
+      <label>
+        <span>Статус</span>
+        <select id="userStatusSelect">
+          <option value="pending">Pending · ожидает</option>
+          <option value="active">Active · разрешён</option>
+          <option value="blocked">Blocked · заблокирован</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Уровень доступа</span>
+        <select id="userAccessLevelSelect">
+          <option value="full">FULL · полный каталог</option>
+          <option value="demo">DEMO · 44 карточки</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Срок</span>
+        <select id="userExpiryPresetSelect">
+          <option value="none">Бессрочно</option>
+          <option value="1">1 день</option>
+          <option value="3">3 дня</option>
+          <option value="7">7 дней</option>
+          <option value="custom">Своя дата</option>
+        </select>
+      </label>
+
+      <label id="customExpiryLabel" class="hidden">
+        <span>Доступ до конца дня</span>
+        <input id="customExpiryDate" type="date" />
+      </label>
+
+      <div class="user-access-actions">
+        <button id="cancelUserAccessButton" class="button ghost" type="button">Отмена</button>
+        <button id="saveUserAccessButton" class="button primary" type="button">Сохранить</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>

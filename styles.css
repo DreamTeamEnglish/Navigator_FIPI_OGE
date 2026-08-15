@@ -24,6 +24,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
   color: var(--text);
   background:
     radial-gradient(circle at 20% -10%, rgba(33, 86, 185, .28), transparent 35%),
@@ -78,7 +79,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(25px, 3vw,
 .button.ghost { background: transparent; color: #a9b9dc; border-color: var(--line); }
 .button.wide { width: 100%; margin-top: 8px; }
 
-.shell { max-width: 1540px; padding: 10px 36px 60px; margin: 0 auto; }
+.shell { width: 100%; min-width: 0; max-width: 1540px; padding: 10px 36px 60px; margin: 0 auto; }
 .hero-card, .filters-card, .matrix-card, .info-card, .prototype-note {
   border: 1px solid var(--line);
   background: linear-gradient(145deg, rgba(11, 25, 59, .86), rgba(5, 13, 34, .82));
@@ -123,7 +124,7 @@ select:focus, input:focus { border-color: rgba(229, 189, 98, .65); box-shadow: 0
 .selection-line strong { color: var(--gold-2); }
 .link-button { border: 0; background: transparent; color: #8fb5ff; padding: 4px; }
 
-.matrix-card { margin-top: 18px; border-radius: var(--radius); overflow: hidden; }
+.matrix-card { min-width: 0; max-width: 100%; margin-top: 18px; border-radius: var(--radius); overflow: hidden; }
 .matrix-toolbar { padding: 24px 24px 18px; display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .matrix-toolbar h3 { font-family: Georgia, serif; font-size: 27px; font-weight: 500; margin: 7px 0 0; }
 .legend { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
@@ -133,7 +134,7 @@ select:focus, input:focus { border-color: rgba(229, 189, 98, .65); box-shadow: 0
 .dot.viewed { background: var(--viewed); color: var(--viewed); }
 .dot.used { background: var(--used); color: var(--used); }
 
-.matrix-scroll { overflow-x: auto; border-top: 1px solid var(--line); scrollbar-color: #24467d #071127; }
+.matrix-scroll { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; border-top: 1px solid var(--line); scrollbar-color: #24467d #071127; }
 .matrix { min-width: 1450px; display: grid; grid-template-columns: repeat(11, minmax(128px, 1fr)); }
 .bucket { border-right: 1px solid var(--line); min-height: 340px; background: rgba(3, 10, 29, .22); }
 .bucket:last-child { border-right: 0; }

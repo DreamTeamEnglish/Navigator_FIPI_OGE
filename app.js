@@ -984,6 +984,10 @@
         showGate('gate', 'Активная подписка VK Donut не найдена. Можно открыть DEMO или войти по приглашению.', 'warning');
         return true;
       }
+      if (result.blocked) {
+        showGate('blocked', 'Доступ к Navigator заблокирован администратором.', 'error');
+        return true;
+      }
       sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}session`, result.session_token);
       sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}vk_user_id`, String(result.vk_user_id));
       await enterDonutSession(result.session_token, result.vk_user_id);
@@ -1110,6 +1114,14 @@
     await refreshAdminPanel();
   }
 
+  async function setDonutBlocked(vkUserId, blocked) {
+    const label = blocked ? 'Заблокировать' : 'Разблокировать';
+    if (!window.confirm(`${label} VK ID ${vkUserId}?`)) return;
+    const { data } = await supabaseClient.auth.getSession();
+    await callDonutFunction({ action: 'admin_set_blocked', vk_user_id: Number(vkUserId), blocked }, data?.session?.access_token || '');
+    await refreshAdminPanel();
+  }
+
   async function fetchDemoEnabled() {
     const { data, error } = await supabaseClient.rpc('demo_is_enabled');
     if (error) throw error;
@@ -1121,7 +1133,8 @@
     const active = rows.filter(p => p.status === 'active' && !isProfileExpired(p)).length;
     const pending = rows.filter(p => p.status === 'pending').length;
     const blocked = rows.filter(p => p.status === 'blocked').length;
-    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · Donut-сессии: ${adminDonutSessions.length}`;
+    const activeDonuts = adminDonutSessions.filter(row => row.last_don_status && !row.blocked).length;
+    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · Donut: ${adminDonutSessions.length} (${activeDonuts} active)`;
 
     if (!rows.length) {
       el.adminUsersList.innerHTML = '<div class="admin-users-empty">Пользователей пока нет.</div>';
@@ -1166,11 +1179,20 @@
     });
 
     if (adminDonutSessions.length) {
-      el.adminUsersList.insertAdjacentHTML('beforeend', `<div class="admin-users-empty">Активные VK Donut-сессии</div>${adminDonutSessions.map(row =>
-        `<article class="admin-user-row"><div class="admin-user-main"><strong>VK ID ${escapeHtml(row.vk_user_id)}</strong><span>DONUT · до ${escapeHtml(new Date(row.expires_at).toLocaleString('ru-RU'))}</span></div><div class="admin-user-actions"><button class="button ghost compact danger-soft" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить</button></div></article>`
+      el.adminUsersList.insertAdjacentHTML('beforeend', `<div class="admin-users-empty">VK Donut-пользователи</div>${adminDonutSessions.map(row => {
+        const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || `VK ID ${row.vk_user_id}`;
+        const status = row.blocked ? 'BLOCKED' : row.last_don_status ? 'ACTIVE DON' : 'NOT ACTIVE';
+        const firstSeen = row.first_seen_at ? new Date(row.first_seen_at).toLocaleString('ru-RU') : '—';
+        const verified = row.last_verified_at ? new Date(row.last_verified_at).toLocaleString('ru-RU') : '—';
+        const session = row.session_expires_at ? ` · сессия до ${new Date(row.session_expires_at).toLocaleString('ru-RU')}` : ' · без активной сессии';
+        return `<article class="admin-user-row"><div class="admin-user-main"><strong>${escapeHtml(name)} · VK ID ${escapeHtml(row.vk_user_id)}</strong><span>DONUT · ${escapeHtml(status)} · впервые ${escapeHtml(firstSeen)} · проверен ${escapeHtml(verified)}${escapeHtml(session)}</span></div><div class="admin-user-actions">${row.session_expires_at ? `<button class="button ghost compact" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="button ${row.blocked ? 'secondary' : 'ghost danger-soft'} compact" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
+      }
       ).join('')}`);
       el.adminUsersList.querySelectorAll('[data-donut-revoke]').forEach(button => {
         button.addEventListener('click', () => revokeDonutSession(button.dataset.donutRevoke));
+      });
+      el.adminUsersList.querySelectorAll('[data-donut-block]').forEach(button => {
+        button.addEventListener('click', () => setDonutBlocked(button.dataset.donutBlock, button.dataset.blocked === 'true'));
       });
     }
   }

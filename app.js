@@ -1,3 +1,4 @@
+// Navigator_FIPI_OGE v0.9.4.2 — TRUE no-flicker + dual-host VK Donut
 (() => {
   'use strict';
 
@@ -12,7 +13,10 @@
   const ADMIN_CONTACT_URL = 'https://vk.ru/im?sel=-229391051';
   const ADMIN_CONTACT_TEXT = 'Здравствуйте! Хочу получить доступ к тематическому навигатору по открытому банку заданий ОГЭ ФИПИ (English).';
   const VK_APP_ID = 54721671;
-  const VK_REDIRECT_URL = 'https://dreamteamenglish.github.io/Navigator_FIPI_OGE/';
+  const VK_REDIRECT_URLS = Object.freeze({
+    'https://dreamteamenglish.github.io': 'https://dreamteamenglish.github.io/Navigator_FIPI_OGE/',
+    'https://dreamteamenglish.gitverse.site': 'https://dreamteamenglish.gitverse.site/navigator_fipi_oge'
+  });
   const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
   const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
 
@@ -117,6 +121,8 @@
   let adminDonutSessions = [];
   let adminStatsUsers = new Map();
   let initialBootPending = true;
+  let resumeValidationInFlight = false;
+  let resumeValidationTimer = null;
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
@@ -1043,6 +1049,14 @@
     }
   }
 
+  function currentVkRedirectUrl() {
+    const redirect = VK_REDIRECT_URLS[window.location.origin];
+    if (!redirect) {
+      throw new Error('VK Donut доступен только на официальных адресах Navigator: GitHub Pages или GitVerse Pages.');
+    }
+    return redirect;
+  }
+
   function randomUrlSafe(length, alphabet) {
     const bytes = new Uint8Array(length);
     crypto.getRandomValues(bytes);
@@ -1064,9 +1078,11 @@
       if (!VKID?.Config?.init || !VKID?.Auth?.login) throw new Error('VK ID SDK не загрузился. Обновите страницу.');
       const state = randomUrlSafe(40, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-');
       const codeVerifier = randomUrlSafe(72, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~');
+      const redirectUrl = currentVkRedirectUrl();
       sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}state`, state);
       sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}verifier`, codeVerifier);
-      VKID.Config.init({ app: VK_APP_ID, redirectUrl: VK_REDIRECT_URL, state, codeVerifier,
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}redirect`, redirectUrl);
+      VKID.Config.init({ app: VK_APP_ID, redirectUrl, state, codeVerifier,
         ...(VKID.ConfigAuthMode?.Redirect ? { mode: VKID.ConfigAuthMode.Redirect } : {}) });
       el.openDonutButton.disabled = true;
       showAccessMessage('Открываю VK ID…', 'info');
@@ -1085,7 +1101,11 @@
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: JSON.stringify(body)
     });
     const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.ok) throw new Error(data?.error || `Ошибка сервера (${response.status})`);
+    if (!response.ok || !data?.ok) {
+      const error = new Error(data?.error || `Ошибка сервера (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
     return data;
   }
 
@@ -1120,10 +1140,11 @@
     try {
       const expectedState = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}state`) || '';
       const codeVerifier = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}verifier`) || '';
+      const redirectUrl = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}redirect`) || currentVkRedirectUrl();
       if (!code || !deviceId || !state || !expectedState || !codeVerifier) throw new Error('Данные входа неполные. Начните вход через VK заново.');
       if (state !== expectedState) throw new Error('State не совпадает. Начните вход через VK заново.');
       const result = await callDonutFunction({ action: 'exchange', code, device_id: deviceId, state,
-        expected_state: expectedState, code_verifier: codeVerifier });
+        expected_state: expectedState, code_verifier: codeVerifier, redirect_uri: redirectUrl });
       if (!result.is_don) {
         showGate('gate', 'Активная подписка VK Donut не найдена. Можно открыть DEMO или войти по приглашению.', 'warning');
         return true;
@@ -1143,6 +1164,7 @@
     } finally {
       sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}state`);
       sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}verifier`);
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}redirect`);
       cleanCallbackUrl();
     }
   }
@@ -1563,23 +1585,115 @@
       sessionStorage.removeItem(`oge-navigator-access-session:${currentUser.id}`);
       const { error } = await supabaseClient.auth.signOut();
       if (error) console.error('Sign out failed:', error);
+      currentUser = null;
+      currentProfile = null;
+      showGate('gate');
       return;
     }
     showGate('gate');
   }
 
+  async function confirmSupabaseSessionAfterResume() {
+    const first = await supabaseClient.auth.getSession();
+    if (first.error) throw first.error;
+    if (first.data?.session?.user) return first.data.session.user;
+
+    // Mobile/desktop browsers may briefly restore the document before the auth
+    // storage/token-refresh pipeline settles. Confirm the empty state once more
+    // before replacing a visible workspace with the login gate.
+    await new Promise(resolve => window.setTimeout(resolve, 320));
+    const second = await supabaseClient.auth.getSession();
+    if (second.error) throw second.error;
+    return second.data?.session?.user || null;
+  }
+
+  async function validateCurrentDonutSessionSilently(token) {
+    // `catalog` is already the protected session-aware endpoint. Asking for one
+    // card validates the token without rebuilding/hiding the visible Navigator.
+    await callDonutFunction({ action: 'catalog', session_token: token, offset: 0, limit: 1 });
+  }
+
+  async function recoverSessionOnResume() {
+    if (!supabaseClient || resumeValidationInFlight || initialBootPending) return;
+    resumeValidationInFlight = true;
+
+    try {
+      // Donut workspace: validate in the background. Never call enterDonutSession
+      // here because it intentionally shows the boot screen and reloads catalog.
+      if (appMode === 'donut') {
+        const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
+        const vkUserId = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}vk_user_id`) || '';
+        if (!token || !vkUserId) {
+          donutUserId = null;
+          showGate('gate', 'Сессия VK Donut завершена. Войдите через VK снова.', 'warning');
+          return;
+        }
+        try {
+          await validateCurrentDonutSessionSilently(token);
+        } catch (error) {
+          if (Number(error?.status) === 401) {
+            sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
+            sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
+            donutUserId = null;
+            showGate('gate', 'Сессия VK Donut истекла. Войдите через VK снова.', 'warning');
+          } else {
+            console.warn('Donut resume validation deferred:', error);
+            // Offline/server hiccup: keep the already-open Navigator visible.
+          }
+        }
+        return;
+      }
+
+      if (appMode === 'demo') return;
+
+      const user = await confirmSupabaseSessionAfterResume();
+      if (user) {
+        const needsActivation = currentUser?.id !== user.id || !['admin','teacher','demo_user'].includes(appMode);
+        if (needsActivation) await activateAuthenticatedSession(user);
+        else if (isAuthenticatedWorkspaceMode()) await loadCloudStatuses();
+        return;
+      }
+
+      // Only now, after a double confirmation, is the session truly absent.
+      currentUser = null;
+      currentProfile = null;
+      if (!['gate','pending','blocked'].includes(appMode)) showGate('gate');
+    } catch (error) {
+      console.error('Session resume check failed:', error);
+      // TRUE no-flicker: temporary network/refresh errors never replace a visible
+      // Navigator with boot/login. The current screen stays untouched.
+    } finally {
+      resumeValidationInFlight = false;
+    }
+  }
+
+  function scheduleResumeValidation() {
+    if (initialBootPending || !supabaseClient) return;
+    if (resumeValidationTimer) window.clearTimeout(resumeValidationTimer);
+    resumeValidationTimer = window.setTimeout(() => {
+      resumeValidationTimer = null;
+      recoverSessionOnResume();
+    }, 120);
+  }
+
   async function handleAuthStateChange(event, session) {
     const user = session?.user || null;
     if (!user) {
-      currentUser = null;
-      currentProfile = null;
       if (initialBootPending) return;
-      if (appMode !== 'demo' && appMode !== 'donut') showGate('gate');
+
+      // A transient empty event is common during tab suspension/bfcache restore.
+      // Never hide a working Navigator here; perform the authoritative check in
+      // the background after the page is visible.
+      if (appMode === 'demo' || appMode === 'donut') return;
+      if (document.visibilityState === 'visible') scheduleResumeValidation();
       return;
     }
 
     if (appMode === 'demo' && event === 'INITIAL_SESSION') return;
-    if (currentUser?.id === user.id && ['admin','teacher','demo_user','pending','blocked'].includes(appMode) && event === 'INITIAL_SESSION') return;
+    if (currentUser?.id === user.id && ['admin','teacher','demo_user','pending','blocked'].includes(appMode)) {
+      if (isAuthenticatedWorkspaceMode()) void loadCloudStatuses();
+      return;
+    }
     await activateAuthenticatedSession(user);
   }
 
@@ -1678,7 +1792,15 @@
   el.resetTopicOverrideButton.addEventListener('click', resetTopicOverride);
   el.closeTopicDialogButton.addEventListener('click', () => el.topicDialog.close());
 
-  document.addEventListener('visibilitychange', refreshWhenVisible);
+  document.addEventListener('visibilitychange', () => {
+    refreshWhenVisible();
+    if (document.visibilityState === 'visible') scheduleResumeValidation();
+  });
+  window.addEventListener('pageshow', event => {
+    // `persisted` is true for back-forward cache; mobile browsers are also free
+    // to reload instead, so run the same safe resume check for every pageshow.
+    scheduleResumeValidation();
+  });
   window.addEventListener('online', () => {
     if (currentUser && isAuthenticatedWorkspaceMode()) loadCloudStatuses();
   });

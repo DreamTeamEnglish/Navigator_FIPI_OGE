@@ -31,22 +31,36 @@
     </div>
   </header>
 
-  <section id="accessGate" class="access-gate">
+  <section id="bootState" class="boot-state" aria-live="polite">
+    <div class="boot-card">
+      <span class="boot-mark">OGE</span>
+      <div>
+        <strong id="bootMessage">Загружаю Navigator…</strong>
+        <span>Проверяю сохранённый доступ</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="accessGate" class="access-gate hidden">
     <div class="access-card">
       <span class="gold-kicker">PROTECTED NAVIGATOR</span>
       <h2>Тематический поиск по заданиям ОГЭ ФИПИ</h2>
-      <p>Полный каталог доступен только приглашённым пользователям. Для знакомства с возможностями Navigator можно открыть ограниченную DEMO-версию.</p>
+      <p>Полный каталог доступен участникам VK Donut или по приглашению администратора. Для знакомства с возможностями Navigator откройте DEMO-версию.</p>
 
       <div id="accessMessage" class="access-message hidden"></div>
 
       <div class="access-actions">
+        <button id="openDonutButton" class="button primary access-main-button" type="button">Войти через VK Donut</button>
         <button id="openLoginButton" class="button primary access-main-button" type="button">Войти</button>
         <button id="openDemoButton" class="button secondary access-main-button" type="button">Попробовать DEMO</button>
       </div>
-      <p class="access-note">Самостоятельная регистрация отключена. Полный доступ выдаётся только по приглашению администратора.</p>
-      <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
-        ✉ Нужен доступ? Напишите администратору
-      </a>
+      <p class="access-note">Доступ выдаётся участникам группы VK Donut или по приглашению администратора.</p>
+      <div class="admin-contact-actions">
+        <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
+          ✉ Нужен доступ? Напишите администратору
+        </a>
+        <button id="copyAdminTextButton" class="copy-contact-button" type="button">Скопировать текст</button>
+      </div>
     </div>
   </section>
 
@@ -205,36 +219,82 @@
   </dialog>
 
 
-  <dialog id="adminAccessDialog">
-    <div class="dialog-card admin-access-card">
+  <dialog id="adminAccessDialog" class="dialog-shell admin-dialog-shell">
+    <div class="dialog-card admin-dialog-card">
       <button id="closeAdminAccessDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
-      <span class="gold-kicker">ADMIN · ACCESS CONTROL</span>
-      <h3>⚙ Управление доступом</h3>
-      <p class="admin-panel-help">Управление DEMO и уже существующими пользователями. Приглашения по email подключим отдельным безопасным этапом.</p>
 
-      <section class="admin-demo-panel">
+      <div class="admin-dialog-head">
         <div>
-          <span class="admin-section-label">DEMO</span>
+          <span class="gold-kicker">OGE ADMIN</span>
+          <h3>Участники и доступ</h3>
+          <p>Тот же компактный принцип панели, что в EGE, но все данные и действия — только OGE.</p>
+        </div>
+        <button id="refreshAdminUsersButton" class="button ghost" type="button">↻ Обновить</button>
+      </div>
+
+      <section class="admin-demo-panel admin-dashboard-panel">
+        <div>
+          <span class="admin-section-label">PUBLIC DEMO</span>
           <div class="admin-demo-state-line">
             <strong id="adminDemoState">Проверяю…</strong>
-            <span>44 демонстрационные карточки</span>
+            <span>44 демонстрационные карточки OGE</span>
           </div>
         </div>
         <div class="admin-demo-actions">
-          <button id="toggleDemoButton" class="button secondary" type="button">Включить</button>
-          <button id="previewDemoButton" class="button ghost" type="button">Открыть DEMO</button>
+          <button id="toggleDemoButton" class="button secondary" type="button">—</button>
+          <button id="previewDemoButton" class="button ghost" type="button">Открыть DEMO ↗</button>
         </div>
       </section>
 
-      <section class="admin-users-panel">
-        <div class="admin-users-head">
+      <section class="admin-stats-panel admin-dashboard-panel">
+        <div class="admin-stats-head">
           <div>
-            <span class="admin-section-label">ПОЛЬЗОВАТЕЛИ</span>
-            <div id="adminUserStats" class="admin-user-stats">Загрузка…</div>
+            <span class="admin-section-label">СТАТИСТИКА ВХОДОВ</span>
+            <div id="statsPeriodLabel" class="admin-user-stats">Последние 30 дней</div>
           </div>
-          <button id="refreshAdminUsersButton" class="button ghost compact" type="button">Обновить</button>
+          <div class="stats-controls">
+            <select id="statsPeriodSelect">
+              <option value="7">7 дней</option>
+              <option value="30" selected>30 дней</option>
+              <option value="90">90 дней</option>
+              <option value="custom">Свой период</option>
+            </select>
+            <input id="statsFromDate" class="hidden" type="date" />
+            <input id="statsToDate" class="hidden" type="date" />
+            <button id="refreshStatsButton" class="button ghost compact" type="button">Показать</button>
+          </div>
         </div>
-        <div id="adminUsersList" class="admin-users-list"></div>
+        <div class="stats-summary">
+          <div><strong id="statsVisits">0</strong><span>входов</span></div>
+          <div><strong id="statsUnique">0</strong><span>пользователей</span></div>
+          <div><strong id="statsEmail">0</strong><span>email</span></div>
+          <div><strong id="statsDonut">0</strong><span>VK Donut</span></div>
+        </div>
+        <div id="statsChart" class="stats-chart" aria-label="График посещений"></div>
+      </section>
+
+      <div class="admin-tabs" role="tablist">
+        <button id="adminParticipantsTab" class="admin-tab active" type="button">
+          Участники <span id="adminParticipantsBadge">0</span>
+        </button>
+        <button id="adminDonutTab" class="admin-tab" type="button">
+          VK Donut <span id="adminDonutBadge">0</span>
+        </button>
+      </div>
+
+      <section id="adminParticipantsPanel" class="admin-panel">
+        <div class="admin-panel-note">
+          Приглашённые email-пользователи OGE: уровень FULL/DEMO, статус и срок доступа.
+        </div>
+        <div id="adminUserStats" class="admin-user-stats admin-user-stats-top">Загрузка…</div>
+        <div id="adminUsersList" class="admin-user-list"></div>
+      </section>
+
+      <section id="adminDonutPanel" class="admin-panel hidden">
+        <div class="admin-panel-note">
+          Реестр OGE VK Donut. Активная техническая сессия показана отдельно; точную дату оплаты/продления VK не передаёт.
+        </div>
+        <div id="adminDonutList" class="admin-user-list"></div>
       </section>
     </div>
   </dialog>
@@ -289,6 +349,7 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>

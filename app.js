@@ -7,15 +7,23 @@
   const CLOUD_CACHE_PREFIX = 'oge-navigator-teacher-cache-v090:';
   const PENDING_PREFIX = 'oge-navigator-pending-v090:';
   const CATALOG_PAGE_SIZE = 1000;
+  const DONUT_PAGE_SIZE = 250;
   const UNTAGGED_TOPIC_ID = '__untagged__';
   const ADMIN_CONTACT_URL = 'https://vk.ru/im?sel=-229391051';
   const ADMIN_CONTACT_TEXT = 'Здравствуйте! Хочу получить доступ к тематическому навигатору по открытому банку заданий ОГЭ ФИПИ (English).';
+  const VK_APP_ID = 54721671;
+  const VK_REDIRECT_URL = 'https://dreamteamenglish.github.io/Navigator_FIPI_OGE/';
+  const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
+  const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
 
   const el = {
+    bootState: document.querySelector('#bootState'),
+    bootMessage: document.querySelector('#bootMessage'),
     accessGate: document.querySelector('#accessGate'),
     appShell: document.querySelector('#appShell'),
     accessMessage: document.querySelector('#accessMessage'),
     openLoginButton: document.querySelector('#openLoginButton'),
+    openDonutButton: document.querySelector('#openDonutButton'),
     openDemoButton: document.querySelector('#openDemoButton'),
     headerLoginButton: document.querySelector('#headerLoginButton'),
     signOutButton: document.querySelector('#signOutButton'),
@@ -25,6 +33,7 @@
     brandLogo: document.querySelector('#brandLogo'),
     footerYear: document.querySelector('#footerYear'),
     toast: document.querySelector('#toast'),
+    copyAdminTextButton: document.querySelector('#copyAdminTextButton'),
 
     topic: document.querySelector('#topicSelect'),
     subtopic: document.querySelector('#subtopicSelect'),
@@ -57,7 +66,15 @@
     previewDemoButton: document.querySelector('#previewDemoButton'),
     adminUserStats: document.querySelector('#adminUserStats'),
     adminUsersList: document.querySelector('#adminUsersList'),
+    adminDonutList: document.querySelector('#adminDonutList'),
+    adminParticipantsTab: document.querySelector('#adminParticipantsTab'),
+    adminDonutTab: document.querySelector('#adminDonutTab'),
+    adminParticipantsPanel: document.querySelector('#adminParticipantsPanel'),
+    adminDonutPanel: document.querySelector('#adminDonutPanel'),
+    adminParticipantsBadge: document.querySelector('#adminParticipantsBadge'),
+    adminDonutBadge: document.querySelector('#adminDonutBadge'),
     refreshAdminUsersButton: document.querySelector('#refreshAdminUsersButton'),
+    statsPeriodSelect: document.querySelector('#statsPeriodSelect'), statsFromDate: document.querySelector('#statsFromDate'), statsToDate: document.querySelector('#statsToDate'), refreshStatsButton: document.querySelector('#refreshStatsButton'), statsPeriodLabel: document.querySelector('#statsPeriodLabel'), statsVisits: document.querySelector('#statsVisits'), statsUnique: document.querySelector('#statsUnique'), statsEmail: document.querySelector('#statsEmail'), statsDonut: document.querySelector('#statsDonut'), statsChart: document.querySelector('#statsChart'),
 
     userAccessDialog: document.querySelector('#userAccessDialog'),
     closeUserAccessDialogButton: document.querySelector('#closeUserAccessDialogButton'),
@@ -85,7 +102,7 @@
   let supabaseClient = null;
   let currentUser = null;
   let currentProfile = null;
-  let appMode = 'gate'; // gate | demo | admin | teacher | pending | blocked
+  let appMode = 'boot'; // boot | gate | demo | donut | admin | teacher | demo_user | pending | blocked
   let tasks = [];
   let baseCards = [];
   let overrideMap = new Map();
@@ -96,6 +113,10 @@
   let editingAccessUserId = null;
   let demoEnabledState = false;
   let toastTimer = null;
+  let donutUserId = null;
+  let adminDonutSessions = [];
+  let adminStatsUsers = new Map();
+  let initialBootPending = true;
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
@@ -194,6 +215,8 @@
       localStorage.setItem(cacheKey(currentUser.id), JSON.stringify(records));
     } else if (appMode === 'demo') {
       localStorage.setItem(DEMO_STATUS_KEY, JSON.stringify(records));
+    } else if (appMode === 'donut' && donutUserId) {
+      localStorage.setItem(`${DONUT_STORAGE_PREFIX}status:${donutUserId}`, JSON.stringify(records));
     }
   }
 
@@ -368,7 +391,6 @@
     el.subtopic.disabled = topicId === UNTAGGED_TOPIC_ID;
   }
 
-
   function populateBuckets() {
     if (!el.bucket) return;
     const previous = el.bucket.value || 'all';
@@ -431,11 +453,11 @@
       const detail = tag.subtopic ? ` · ${tag.subtopic}` : '';
       const manual = tag.source === 'manual_admin' ? 'Ручная разметка администратора' : '';
       const confidence = tag.confidence ? `Уверенность: ${Math.round(tag.confidence * 100)}%` : '';
-      return `<span class="oge-topic-tag${manual ? ' manual-tag' : ''}" title="${escapeAttr([manual, confidence].filter(Boolean).join(' · '))}">${escapeHtml(label)}${escapeHtml(detail)}</span>`;
+      return `<span class="oge-topic-tag${manual ? ' manual-tag' : ''}" title="${escapeAttr([`${label}${detail}`, manual, confidence].filter(Boolean).join(' · '))}">${escapeHtml(label)}${escapeHtml(detail)}</span>`;
     }).join('');
 
     const noTopic = !topicNames
-      ? '<span class="oge-topic-tag muted-tag">Без тематической метки</span>'
+      ? '<span class="oge-topic-tag muted-tag" title="Без тематической метки">Без тематической метки</span>'
       : '';
 
     const kes = task.liveKesCode ? `КЭС ${task.liveKesCode}` : 'КЭС —';
@@ -919,11 +941,13 @@
     if (appMode === 'admin') setBadge('live', 'ADMIN · SECURE', 'Полный защищённый доступ администратора');
     else if (appMode === 'teacher') setBadge('live', 'TEACHER · SECURE', 'Полный защищённый доступ учителя');
     else if (appMode === 'demo_user') setBadge('demo', 'DEMO · INVITED', 'Персональный ограниченный доступ по приглашению');
+    else if (appMode === 'donut') setBadge('live', 'VK DONUT · ACTIVE', 'Подписка VK Donut проверена на сервере');
   }
 
   function enterApp(mode) {
     appMode = mode;
     document.body.classList.add('oge-workspace-mode');
+    if (el.bootState) el.bootState.classList.add('hidden');
     clearAccessMessage();
     el.accessGate.classList.add('hidden');
     el.appShell.classList.remove('hidden');
@@ -939,6 +963,10 @@
       el.modeKicker.textContent = 'DEMO · INVITED ACCESS';
       el.signOutButton.textContent = 'Выйти';
       setSecureBadge();
+    } else if (mode === 'donut') {
+      el.modeKicker.textContent = 'VK DONUT · FULL ACCESS';
+      el.signOutButton.textContent = 'Выйти';
+      setSecureBadge();
     } else {
       el.modeKicker.textContent = 'LEXICAL FIRST';
       el.signOutButton.textContent = 'Выйти';
@@ -950,6 +978,7 @@
   function showGate(mode = 'gate', message = '', kind = 'info') {
     appMode = mode;
     document.body.classList.remove('oge-workspace-mode');
+    if (el.bootState) el.bootState.classList.add('hidden');
     tasks = [];
     baseCards = [];
     overrideMap = new Map();
@@ -965,6 +994,19 @@
     setBadge('protected', 'PROTECTED', 'Каталог защищён Supabase Auth + RLS');
     if (message) showAccessMessage(message, kind);
     else clearAccessMessage();
+  }
+
+  function showBoot(message = 'Загружаю Navigator…') {
+    appMode = 'boot';
+    document.body.classList.remove('oge-workspace-mode');
+    el.appShell.classList.add('hidden');
+    el.accessGate.classList.add('hidden');
+    el.headerLoginButton.classList.add('hidden');
+    el.signOutButton.classList.add('hidden');
+    el.adminAccessButton.classList.add('hidden');
+    if (el.bootMessage) el.bootMessage.textContent = message;
+    if (el.bootState) el.bootState.classList.remove('hidden');
+    clearAccessMessage();
   }
 
   async function startDemo() {
@@ -1001,11 +1043,123 @@
     }
   }
 
+  function randomUrlSafe(length, alphabet) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  }
+
+  function cleanCallbackUrl() {
+    const url = new URL(window.location.href);
+    ['code', 'device_id', 'state', 'type'].forEach(key => url.searchParams.delete(key));
+    history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function startDonutLogin() {
+    clearAccessMessage();
+    try {
+      const VKID = window.VKIDSDK;
+      if (!VKID?.Config?.init || !VKID?.Auth?.login) throw new Error('VK ID SDK не загрузился. Обновите страницу.');
+      const state = randomUrlSafe(40, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-');
+      const codeVerifier = randomUrlSafe(72, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~');
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}state`, state);
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}verifier`, codeVerifier);
+      VKID.Config.init({ app: VK_APP_ID, redirectUrl: VK_REDIRECT_URL, state, codeVerifier,
+        ...(VKID.ConfigAuthMode?.Redirect ? { mode: VKID.ConfigAuthMode.Redirect } : {}) });
+      el.openDonutButton.disabled = true;
+      showAccessMessage('Открываю VK ID…', 'info');
+      VKID.Auth.login().catch(error => {
+        el.openDonutButton.disabled = false;
+        showAccessMessage(`Не удалось открыть VK ID: ${error?.message || error}`, 'error');
+      });
+    } catch (error) {
+      el.openDonutButton.disabled = false;
+      showAccessMessage(error?.message || String(error), 'error');
+    }
+  }
+
+  async function callDonutFunction(body, authToken = '') {
+    const response = await fetch(DONUT_FUNCTION_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) }, body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) throw new Error(data?.error || `Ошибка сервера (${response.status})`);
+    return data;
+  }
+
+  async function fetchDonutCatalog(token) {
+    const cards = [];
+    for (let offset = 0; ; offset += DONUT_PAGE_SIZE) {
+      const data = await callDonutFunction({ action: 'catalog', session_token: token, offset, limit: DONUT_PAGE_SIZE });
+      const page = Array.isArray(data.cards) ? data.cards : [];
+      cards.push(...page);
+      if (page.length < DONUT_PAGE_SIZE) break;
+    }
+    return cards;
+  }
+
+  async function enterDonutSession(token, vkUserId) {
+    showBoot('Загружаю защищённый каталог…');
+    const cards = await fetchDonutCatalog(token);
+    if (!cards.length) throw new Error('Защищённый каталог не вернул карточки.');
+    donutUserId = String(vkUserId);
+    records = normalizeRecords(safeParse(localStorage.getItem(`${DONUT_STORAGE_PREFIX}status:${donutUserId}`), {}));
+    setTasks(cards, new Map());
+    enterApp('donut');
+  }
+
+  async function processDonutCallback() {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const deviceId = url.searchParams.get('device_id');
+    const state = url.searchParams.get('state');
+    if (!code && !deviceId && !state) return false;
+    showBoot('Проверяю подписку VK Donut…');
+    try {
+      const expectedState = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}state`) || '';
+      const codeVerifier = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}verifier`) || '';
+      if (!code || !deviceId || !state || !expectedState || !codeVerifier) throw new Error('Данные входа неполные. Начните вход через VK заново.');
+      if (state !== expectedState) throw new Error('State не совпадает. Начните вход через VK заново.');
+      const result = await callDonutFunction({ action: 'exchange', code, device_id: deviceId, state,
+        expected_state: expectedState, code_verifier: codeVerifier });
+      if (!result.is_don) {
+        showGate('gate', 'Активная подписка VK Donut не найдена. Можно открыть DEMO или войти по приглашению.', 'warning');
+        return true;
+      }
+      if (result.blocked) {
+        showGate('blocked', 'Доступ к Navigator заблокирован администратором.', 'error');
+        return true;
+      }
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}session`, result.session_token);
+      sessionStorage.setItem(`${DONUT_STORAGE_PREFIX}vk_user_id`, String(result.vk_user_id));
+      await enterDonutSession(result.session_token, result.vk_user_id);
+      return true;
+    } catch (error) {
+      console.error('VK Donut access failed:', error);
+      showGate('gate', `Не удалось проверить VK Donut: ${error?.message || error}`, 'error');
+      return true;
+    } finally {
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}state`);
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}verifier`);
+      cleanCallbackUrl();
+    }
+  }
+
+  async function recordEmailAccess(accessLevel) {
+    if (!supabaseClient || !currentUser) return;
+    const key = `oge-navigator-access-session:${currentUser.id}`;
+    let sessionId = sessionStorage.getItem(key);
+    if (!sessionId) { sessionId = crypto.randomUUID(); sessionStorage.setItem(key, sessionId); }
+    const { error } = await supabaseClient.rpc('record_navigator_access', { p_session_id: sessionId, p_access_level: accessLevel });
+    if (error) console.error('Access event save failed:', error);
+  }
+
   async function activateAuthenticatedSession(user) {
     currentUser = user;
     currentProfile = null;
-    showGate('gate');
-    showAccessMessage('Проверяю доступ…', 'info');
+    showBoot('Проверяю доступ…');
 
     try {
       const profile = await fetchProfile(user.id);
@@ -1037,6 +1191,7 @@
         if (!cards.length) throw new Error('Персональная DEMO-подборка недоступна.');
         setTasks(cards, new Map());
         enterApp('demo_user');
+        await recordEmailAccess('demo');
         await loadCloudStatuses();
         return;
       }
@@ -1055,6 +1210,7 @@
       }
       setTasks(cards, overrides);
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
+      await recordEmailAccess(profile.role === 'admin' ? 'admin' : 'full');
       await loadCloudStatuses();
     } catch (error) {
       console.error('Access activation failed:', error);
@@ -1097,10 +1253,61 @@
     return data || [];
   }
 
+  async function fetchAdminDonutSessions() {
+    const { data } = await supabaseClient.auth.getSession();
+    const token = data?.session?.access_token || '';
+    if (!token) return [];
+    const result = await callDonutFunction({ action: 'admin_sessions' }, token);
+    return Array.isArray(result.sessions) ? result.sessions : [];
+  }
+
+  async function revokeDonutSession(vkUserId) {
+    if (!window.confirm(`Завершить активную Donut-сессию VK ID ${vkUserId}?`)) return;
+    const { data } = await supabaseClient.auth.getSession();
+    await callDonutFunction({ action: 'admin_revoke', vk_user_id: Number(vkUserId) }, data?.session?.access_token || '');
+    await refreshAdminPanel();
+  }
+
+  async function setDonutBlocked(vkUserId, blocked) {
+    const label = blocked ? 'Заблокировать' : 'Разблокировать';
+    if (!window.confirm(`${label} VK ID ${vkUserId}?`)) return;
+    const { data } = await supabaseClient.auth.getSession();
+    await callDonutFunction({ action: 'admin_set_blocked', vk_user_id: Number(vkUserId), blocked }, data?.session?.access_token || '');
+    await refreshAdminPanel();
+  }
+
   async function fetchDemoEnabled() {
     const { data, error } = await supabaseClient.rpc('demo_is_enabled');
     if (error) throw error;
     return Boolean(data);
+  }
+
+  function statsRange() {
+    const to = new Date();
+    const days = Number(el.statsPeriodSelect.value) || 30;
+    let from = new Date(to.getTime() - days * 86400000);
+    if (el.statsPeriodSelect.value === 'custom') {
+      if (el.statsFromDate.value) from = new Date(`${el.statsFromDate.value}T00:00:00`);
+      if (el.statsToDate.value) to.setTime(new Date(`${el.statsToDate.value}T23:59:59.999`).getTime());
+    }
+    return { from, to };
+  }
+
+  function renderStatsChart(rows = []) {
+    if (!rows.length) { el.statsChart.innerHTML = '<div class="admin-users-empty">Данных пока нет.</div>'; return; }
+    const w=760,h=210,px=34,py=24,max=Math.max(1,...rows.map(r=>Number(r.visits)||0));
+    const pts=rows.map((r,i)=>({x:px+(rows.length===1?0:i*(w-px*2)/(rows.length-1)),y:h-py-(Number(r.visits)||0)*(h-py*2)/max,v:Number(r.visits)||0,d:String(r.day)}));
+    el.statsChart.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img"><line x1="${px}" y1="${h-py}" x2="${w-px}" y2="${h-py}" class="stats-axis"/><polyline points="${pts.map(p=>`${p.x},${p.y}`).join(' ')}" class="stats-line"/>${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" class="stats-dot"><title>${escapeHtml(p.d)}: ${p.v}</title></circle>`).join('')}</svg>`;
+  }
+
+  async function refreshStatistics() {
+    if (appMode !== 'admin') return;
+    const {from,to}=statsRange();
+    el.statsPeriodLabel.textContent=`${from.toLocaleDateString('ru-RU')} — ${to.toLocaleDateString('ru-RU')}`;
+    const {data,error}=await supabaseClient.rpc('admin_navigator_stats',{p_from:from.toISOString(),p_to:to.toISOString()});
+    if(error) throw error; const s=data||{};
+    el.statsVisits.textContent=s.visits||0; el.statsUnique.textContent=s.unique_users||0; el.statsEmail.textContent=s.email_visits||0; el.statsDonut.textContent=s.donut_visits||0;
+    adminStatsUsers=new Map((s.users||[]).map(r=>[`${r.user_kind}:${r.user_key}`,r])); renderStatsChart(s.daily||[]);
   }
 
   function renderAdminUsers() {
@@ -1108,49 +1315,52 @@
     const active = rows.filter(p => p.status === 'active' && !isProfileExpired(p)).length;
     const pending = rows.filter(p => p.status === 'pending').length;
     const blocked = rows.filter(p => p.status === 'blocked').length;
-    el.adminUserStats.textContent = `Всего: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked}`;
+    const activeDonuts = adminDonutSessions.filter(row => row.session_expires_at && !row.blocked).length;
 
-    if (!rows.length) {
-      el.adminUsersList.innerHTML = '<div class="admin-users-empty">Пользователей пока нет.</div>';
-      return;
-    }
+    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · VK Donut: ${adminDonutSessions.length}`;
+    if (el.adminParticipantsBadge) el.adminParticipantsBadge.textContent = String(rows.length);
+    if (el.adminDonutBadge) el.adminDonutBadge.textContent = String(adminDonutSessions.length);
 
-    el.adminUsersList.innerHTML = rows.map(profile => {
+    el.adminUsersList.innerHTML = rows.length ? rows.map(profile => {
       const self = profile.id === currentUser?.id;
+      const activity = adminStatsUsers.get(`email:${profile.id}`);
       const expired = isProfileExpired(profile);
-      const meta = [
-        profile.role === 'admin' ? 'ADMIN' : 'TEACHER',
-        accessDisplay(profile.access_level),
-        statusDisplay(profile.status),
-        expired ? 'EXPIRED' : formatAccessExpiry(profile.access_expires_at)
-      ].join(' · ');
-
-      let actions = '<span class="admin-self-note">Это ваш аккаунт</span>';
+      const statusClass = expired ? 'blocked' : (profile.status || 'pending');
+      const levelClass = profile.access_level === 'demo' ? 'demo' : 'full';
+      const joined = profile.created_at ? new Date(profile.created_at).toLocaleDateString('ru-RU') : '—';
+      const expiry = formatAccessExpiry(profile.access_expires_at);
+      const visits = activity?.login_count || 0;
+      let actions = '<span class="admin-self-note">Ваш аккаунт</span>';
       if (!self) {
-        const quick = profile.status === 'blocked'
-          ? `<button class="button secondary compact" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="active">Восстановить</button>`
-          : profile.status === 'pending'
-            ? `<button class="button secondary compact" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="active">Разрешить</button>`
-            : `<button class="button ghost compact danger-soft" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="blocked">Заблокировать</button>`;
-
-        actions = `<button class="button ghost compact" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button>${quick}`;
+        const nextStatus = profile.status === 'blocked' ? 'active' : 'blocked';
+        actions = `<button class="admin-mini-button" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button><button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
       }
+      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(profile.email || profile.id)}</div><div class="admin-user-chips"><span class="admin-chip">EMAIL</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${profile.role === 'admin' ? 'admin' : 'invite'}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
+    }).join('') : '<div class="admin-users-empty">Email-пользователей пока нет.</div>';
 
-      return `<article class="admin-user-row${self ? ' self' : ''}">
-        <div class="admin-user-main">
-          <strong>${escapeHtml(profile.email || 'Без email')}</strong>
-          <span>${escapeHtml(meta)}</span>
-        </div>
-        <div class="admin-user-actions">${actions}</div>
-      </article>`;
-    }).join('');
+    const donuts = adminDonutSessions;
+    el.adminDonutList.innerHTML = donuts.length ? donuts.map(row => {
+      const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || `VK ID ${row.vk_user_id}`;
+      const firstSeen = row.first_seen_at ? new Date(row.first_seen_at).toLocaleString('ru-RU') : '—';
+      const verified = row.last_verified_at ? new Date(row.last_verified_at).toLocaleString('ru-RU') : '—';
+      const sessionActive = Boolean(row.session_expires_at) && new Date(row.session_expires_at).getTime() > Date.now();
+      const sessionText = sessionActive ? `до ${new Date(row.session_expires_at).toLocaleString('ru-RU')}` : 'нет активной сессии';
+      const activity = adminStatsUsers.get(`donut:${row.vk_user_id}`);
+      return `<article class="admin-user-card${sessionActive ? ' online-now' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(name)}</div><div class="admin-user-id">VK ID ${escapeHtml(row.vk_user_id)}</div><div class="admin-user-chips"><span class="admin-chip">VK DONUT</span><span class="admin-chip full">FULL</span><span class="admin-chip ${row.blocked ? 'blocked' : row.last_don_status ? 'active' : 'pending'}">${row.blocked ? 'BLOCKED' : row.last_don_status ? 'DONUT ACTIVE' : 'NOT ACTIVE'}</span>${sessionActive ? '<span class="admin-chip active">SESSION</span>' : ''}</div></div><div class="admin-user-info"><span>Впервые: <strong>${escapeHtml(firstSeen)}</strong></span><span>Проверка: <strong>${escapeHtml(verified)}</strong></span></div><div class="admin-user-info"><span>Сессия: <strong>${escapeHtml(sessionText)}</strong></span><span>Входов за период: <strong>${escapeHtml(activity?.login_count || 0)}</strong></span></div><div class="admin-user-actions">${sessionActive ? `<button class="admin-mini-button" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="admin-mini-button ${row.blocked ? 'success-soft' : 'danger-soft'}" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
+    }).join('') : '<div class="admin-users-empty">VK Donut-пользователей пока нет.</div>';
 
-    el.adminUsersList.querySelectorAll('[data-user-edit]').forEach(button => {
-      button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEdit));
-    });
-    el.adminUsersList.querySelectorAll('[data-user-quick]').forEach(button => {
-      button.addEventListener('click', () => quickSetUserStatus(button.dataset.userQuick, button.dataset.nextStatus));
-    });
+    el.adminUsersList.querySelectorAll('[data-user-edit]').forEach(button => button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEdit)));
+    el.adminUsersList.querySelectorAll('[data-user-quick]').forEach(button => button.addEventListener('click', () => quickSetUserStatus(button.dataset.userQuick, button.dataset.nextStatus)));
+    el.adminDonutList.querySelectorAll('[data-donut-revoke]').forEach(button => button.addEventListener('click', () => revokeDonutSession(button.dataset.donutRevoke)));
+    el.adminDonutList.querySelectorAll('[data-donut-block]').forEach(button => button.addEventListener('click', () => setDonutBlocked(button.dataset.donutBlock, button.dataset.blocked === 'true')));
+  }
+
+  function setAdminTab(tab = 'participants') {
+    const donut = tab === 'donut';
+    el.adminParticipantsTab?.classList.toggle('active', !donut);
+    el.adminDonutTab?.classList.toggle('active', donut);
+    el.adminParticipantsPanel?.classList.toggle('hidden', donut);
+    el.adminDonutPanel?.classList.toggle('hidden', !donut);
   }
 
   function renderAdminDemoState() {
@@ -1163,26 +1373,32 @@
     if (appMode !== 'admin' || !currentUser) return;
     el.adminUserStats.textContent = 'Загрузка…';
     el.adminUsersList.innerHTML = '<div class="admin-users-empty">Загружаю пользователей…</div>';
+    el.adminDonutList.innerHTML = '<div class="admin-users-empty">Загружаю VK Donut…</div>';
     try {
-      const [profiles, enabled] = await Promise.all([
+      const [profiles, enabled, donutSessions] = await Promise.all([
         fetchAdminProfiles(),
-        fetchDemoEnabled()
+        fetchDemoEnabled(),
+        fetchAdminDonutSessions()
       ]);
       adminProfiles = profiles;
+      adminDonutSessions = donutSessions;
       demoEnabledState = enabled;
       renderAdminDemoState();
       renderAdminUsers();
     } catch (error) {
       console.error('Admin panel refresh failed:', error);
       el.adminUserStats.textContent = 'Не удалось загрузить данные';
-      el.adminUsersList.innerHTML = `<div class="admin-users-empty error-text">${escapeHtml(error?.message || error)}</div>`;
+      const html = `<div class="admin-users-empty error-text">${escapeHtml(error?.message || error)}</div>`;
+      el.adminUsersList.innerHTML = html;
+      el.adminDonutList.innerHTML = html;
     }
   }
 
   async function openAdminPanel() {
     if (appMode !== 'admin') return;
     if (typeof el.adminAccessDialog.showModal === 'function') el.adminAccessDialog.showModal();
-    await refreshAdminPanel();
+    await Promise.all([refreshAdminPanel(), refreshStatistics()]);
+    renderAdminUsers();
   }
 
   async function toggleDemoFromAdmin() {
@@ -1331,12 +1547,20 @@
   }
 
   async function leaveCurrentMode() {
+    if (appMode === 'donut') {
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
+      sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
+      donutUserId = null;
+      showGate('gate');
+      return;
+    }
     if (appMode === 'demo') {
       if (currentUser) await activateAuthenticatedSession(currentUser);
       else showGate('gate');
       return;
     }
     if (supabaseClient && currentUser) {
+      sessionStorage.removeItem(`oge-navigator-access-session:${currentUser.id}`);
       const { error } = await supabaseClient.auth.signOut();
       if (error) console.error('Sign out failed:', error);
       return;
@@ -1349,7 +1573,8 @@
     if (!user) {
       currentUser = null;
       currentProfile = null;
-      if (appMode !== 'demo') showGate('gate');
+      if (initialBootPending) return;
+      if (appMode !== 'demo' && appMode !== 'donut') showGate('gate');
       return;
     }
 
@@ -1363,8 +1588,10 @@
       el.openLoginButton.disabled = true;
       el.openDemoButton.disabled = true;
       el.headerLoginButton.disabled = true;
+      if (el.openDonutButton) el.openDonutButton.disabled = false;
+      initialBootPending = false;
       showGate('gate', 'Supabase ещё не подключён. Заполните Project URL и Publishable/anon key в config.js.', 'warning');
-      return;
+      return false;
     }
 
     supabaseClient = window.supabase.createClient(CONFIG.supabaseUrl, configuredKey(), {
@@ -1375,11 +1602,11 @@
     if (error) console.error('Session read failed:', error);
     const user = data?.session?.user || null;
     if (user) await activateAuthenticatedSession(user);
-    else showGate('gate');
 
     supabaseClient.auth.onAuthStateChange((event, session) => {
       window.setTimeout(() => handleAuthStateChange(event, session), 0);
     });
+    return true;
   }
 
   function refreshWhenVisible() {
@@ -1398,6 +1625,7 @@
   el.search.addEventListener('input', render);
   el.reset.addEventListener('click', () => resetFilters(true));
   el.openLoginButton.addEventListener('click', openAuthDialog);
+  el.openDonutButton.addEventListener('click', startDonutLogin);
   el.headerLoginButton.addEventListener('click', openAuthDialog);
   el.openDemoButton.addEventListener('click', startDemo);
   el.signOutButton.addEventListener('click', leaveCurrentMode);
@@ -1412,7 +1640,15 @@
     el.adminAccessDialog.close();
     startDemo();
   });
-  el.refreshAdminUsersButton.addEventListener('click', refreshAdminPanel);
+  el.refreshAdminUsersButton.addEventListener('click', async () => { await Promise.all([refreshAdminPanel(), refreshStatistics()]); renderAdminUsers(); });
+  el.adminParticipantsTab?.addEventListener('click', () => setAdminTab('participants'));
+  el.adminDonutTab?.addEventListener('click', () => setAdminTab('donut'));
+  el.refreshStatsButton.addEventListener('click', async () => { await refreshStatistics(); renderAdminUsers(); });
+  el.statsPeriodSelect.addEventListener('change', () => {
+    const custom = el.statsPeriodSelect.value === 'custom';
+    el.statsFromDate.classList.toggle('hidden', !custom);
+    el.statsToDate.classList.toggle('hidden', !custom);
+  });
 
   el.closeUserAccessDialogButton.addEventListener('click', () => el.userAccessDialog.close());
   el.cancelUserAccessButton.addEventListener('click', () => el.userAccessDialog.close());
@@ -1424,15 +1660,12 @@
   document.querySelectorAll('[data-admin-contact]').forEach(link => {
     link.addEventListener('click', () => copyAdminContactText());
   });
+  el.copyAdminTextButton?.addEventListener('click', copyAdminContactText);
 
   function scrollMatrix(direction) {
     if (!el.matrixViewport) return;
     const column = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--oge-col-width')) || 286;
-    el.matrixViewport.scrollBy({
-      left: direction * (column + 12) * 2,
-      top: 0,
-      behavior: 'smooth'
-    });
+    el.matrixViewport.scrollBy({ left: direction * (column + 12) * 2, top: 0, behavior: 'smooth' });
   }
 
   el.scrollLeftButton.addEventListener('click', () => scrollMatrix(-1));
@@ -1451,12 +1684,48 @@
   });
 
   populateBuckets();
+  setAdminTab('participants');
 
   el.footerYear.textContent = String(new Date().getFullYear());
   el.brandLogo.addEventListener('error', () => {
     if (!el.brandLogo.src.endsWith('brand-logo-fallback.svg')) el.brandLogo.src = 'assets/brand-logo-fallback.svg';
   }, { once: true });
 
-  showGate('gate');
-  initCloud();
+  async function bootstrap() {
+    showBoot('Загружаю Navigator…');
+    const cloudReady = await initCloud();
+    if (!cloudReady) return;
+
+    if (currentUser) {
+      initialBootPending = false;
+      return;
+    }
+
+    if (await processDonutCallback()) {
+      initialBootPending = false;
+      return;
+    }
+
+    const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
+    const vkUserId = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}vk_user_id`) || '';
+    if (token && vkUserId) {
+      try {
+        await enterDonutSession(token, vkUserId);
+        initialBootPending = false;
+        return;
+      } catch (error) {
+        sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
+        sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
+        initialBootPending = false;
+        showGate('gate', 'Сессия VK Donut истекла. Войдите через VK снова.', 'warning');
+        return;
+      }
+    }
+
+    initialBootPending = false;
+    showGate('gate');
+  }
+
+
+  bootstrap();
 })();

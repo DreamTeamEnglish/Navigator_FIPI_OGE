@@ -1208,3 +1208,392 @@ body.oge-workspace-mode .prototype-note {
     font-size: 17px;
   }
 }
+
+/* ============================================================
+   v0.9.4 — anti-flicker boot + uniform cards + EGE-style OGE admin
+   UI only. OGE data/RPC/Edge Function names stay unchanged.
+   ============================================================ */
+
+/* Quiet initial state: the login gate is not painted before session restore. */
+.boot-state {
+  min-height: 52vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px 64px;
+}
+.boot-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: min(360px, calc(100vw - 36px));
+  padding: 17px 19px;
+  border: 1px solid rgba(229,189,98,.22);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(9,25,61,.84), rgba(4,12,31,.82));
+  box-shadow: 0 20px 60px rgba(0,0,0,.20);
+  backdrop-filter: blur(16px);
+}
+.boot-mark {
+  width: 45px;
+  height: 45px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 45px;
+  border-radius: 13px;
+  border: 1px solid rgba(229,189,98,.42);
+  background: rgba(19,63,139,.34);
+  color: var(--gold-2);
+  font: 700 13px/1 Georgia, "Times New Roman", serif;
+  letter-spacing: .08em;
+}
+.boot-card strong,
+.boot-card span { display: block; }
+.boot-card strong { color: #f7f9ff; font-size: 13px; }
+.boot-card div > span { margin-top: 4px; color: #879ac5; font-size: 10px; }
+
+/* Every OGE card has exactly the same box. Long tags are clipped, never scrolled. */
+.oge-task-card {
+  height: 178px;
+  min-height: 178px;
+  max-height: 178px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.oge-card-top,
+.oge-kes-line { flex: 0 0 auto; }
+.oge-topic-tags {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 64px;
+  overflow: hidden;
+  align-content: flex-start;
+}
+.oge-card-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+/* EGE-like admin composition, in OGE blue/gold. */
+.admin-dialog-shell {
+  width: min(1180px, calc(100% - 28px));
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.admin-dialog-shell::backdrop {
+  background: rgba(1,5,16,.74);
+  backdrop-filter: blur(5px);
+}
+.admin-dialog-card {
+  width: 100%;
+  max-width: none;
+  max-height: calc(100vh - 28px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  border: 1px solid rgba(122,163,255,.20);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(30,80,176,.16), transparent 32%),
+    linear-gradient(155deg, rgba(7,19,49,.99), rgba(3,10,27,.99));
+  box-shadow: 0 35px 100px rgba(0,0,0,.48);
+}
+.admin-dialog-head {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding-right: 34px;
+}
+.admin-dialog-head h3 {
+  margin: 4px 0 5px;
+  font: 600 clamp(21px, 3vw, 29px)/1.12 Georgia, "Times New Roman", serif;
+}
+.admin-dialog-head p {
+  max-width: 700px;
+  margin: 0;
+  color: #91a4cb;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.admin-dashboard-panel {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(122,163,255,.15);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+.admin-demo-panel.admin-dashboard-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.admin-section-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #e5bd62;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.admin-demo-state-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.admin-demo-state-line strong { color: #eef4ff; font-size: 13px; }
+.admin-demo-state-line > span { color: #8196c2; font-size: 10px; }
+.demo-state.on { color: #9ee0c4 !important; }
+.demo-state.off { color: #c1aeb0 !important; }
+.admin-demo-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.admin-stats-panel.admin-dashboard-panel {
+  padding-bottom: 11px;
+}
+.admin-stats-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.stats-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.stats-controls select,
+.stats-controls input {
+  min-height: 33px;
+  padding: 0 8px;
+  border: 1px solid rgba(122,163,255,.18);
+  border-radius: 8px;
+  background: #071b43;
+  color: #dce7ff;
+  font-size: 10px;
+}
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.stats-summary > div {
+  padding: 8px 10px;
+  border: 1px solid rgba(122,163,255,.12);
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+}
+.stats-summary strong,
+.stats-summary span { display: block; }
+.stats-summary strong { color: #f6d881; font-size: 16px; }
+.stats-summary span { margin-top: 1px; color: #8297c0; font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
+.stats-chart {
+  width: 100%;
+  min-height: 86px;
+  max-height: 118px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.stats-chart svg { width: 100%; height: 106px; display: block; }
+.stats-axis { stroke: rgba(153,181,231,.24); stroke-width: 1; }
+.stats-line { fill: none; stroke: #e5bd62; stroke-width: 2.2; }
+.stats-dot { fill: #f4d88b; }
+
+.admin-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 7px;
+  margin-top: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(122,163,255,.14);
+}
+.admin-tab {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(122,163,255,.18);
+  color: #b4c4e4;
+  background: rgba(255,255,255,.025);
+  font-weight: 800;
+  font-size: 11px;
+}
+.admin-tab span {
+  display: inline-flex;
+  min-width: 22px;
+  justify-content: center;
+  margin-left: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  font-size: 9px;
+}
+.admin-tab.active {
+  color: #07142e;
+  border-color: var(--gold);
+  background: linear-gradient(180deg, #f1d98f, #d4a945);
+}
+.admin-tab.active span { background: rgba(7,20,46,.10); }
+.admin-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 3px 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #3a5d9b #061431;
+}
+.admin-panel-note {
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(122,163,255,.12);
+  background: rgba(255,255,255,.022);
+  color: #8ea3cc;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.admin-user-stats-top { margin: 8px 1px 0; }
+.admin-user-stats { color: #8196c1; font-size: 9px; }
+.admin-user-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+.admin-user-card {
+  display: grid;
+  grid-template-columns: minmax(215px, 1.35fr) minmax(160px, .82fr) minmax(185px, .92fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid rgba(122,163,255,.15);
+  border-radius: 13px;
+  background: rgba(255,255,255,.03);
+}
+.admin-user-card.self {
+  border-color: rgba(229,189,98,.28);
+  background: rgba(229,189,98,.045);
+}
+.admin-user-card.online-now {
+  border-color: rgba(80,193,151,.32);
+  background: rgba(30,139,101,.07);
+}
+.admin-user-main { min-width: 0; }
+.admin-user-name {
+  color: #eff4ff;
+  font-weight: 800;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-user-id {
+  margin-top: 2px;
+  color: #758bb6;
+  font-size: 8px;
+  word-break: break-all;
+}
+.admin-user-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.admin-chip {
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(122,163,255,.17);
+  background: rgba(255,255,255,.035);
+  color: #b7c6e3;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .04em;
+}
+.admin-chip.full,
+.admin-chip.active {
+  color: #baf0d8;
+  border-color: rgba(66,184,139,.30);
+  background: rgba(30,137,98,.11);
+}
+.admin-chip.demo,
+.admin-chip.admin-role {
+  color: #f2d991;
+  border-color: rgba(229,189,98,.28);
+  background: rgba(229,189,98,.075);
+}
+.admin-chip.blocked {
+  color: #ffb6b1;
+  border-color: rgba(225,88,88,.28);
+  background: rgba(190,58,58,.10);
+}
+.admin-chip.pending { color: #d6c6a0; }
+.admin-user-info {
+  display: grid;
+  gap: 4px;
+  color: #8fa3ca;
+  font-size: 9px;
+  line-height: 1.35;
+}
+.admin-user-info strong { color: #dce6f8; font-weight: 700; }
+.admin-user-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.admin-mini-button {
+  min-height: 31px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(122,163,255,.18);
+  background: rgba(255,255,255,.035);
+  color: #c7d5ee;
+  font-size: 9px;
+  font-weight: 800;
+}
+.admin-mini-button:hover { border-color: rgba(229,189,98,.5); color: #f4dc9a; }
+.admin-mini-button.danger-soft { color: #ffb8b3; border-color: rgba(225,88,88,.24); }
+.admin-mini-button.success-soft { color: #b6ecd4; border-color: rgba(70,184,140,.25); }
+.admin-self-note { color: #d9c98f; font-size: 9px; white-space: nowrap; }
+.admin-users-empty {
+  padding: 16px 12px;
+  color: #8195bd;
+  text-align: center;
+  font-size: 10px;
+}
+
+/* Keep the existing OGE access editor, but visually align it with the new panel. */
+.user-access-card {
+  border: 1px solid rgba(122,163,255,.20);
+  background: linear-gradient(155deg, #091a43, #050d23);
+}
+
+@media (max-width: 900px) {
+  .admin-dialog-card { padding: 20px; }
+  .admin-user-card { grid-template-columns: 1fr 1fr; }
+  .admin-user-actions { justify-content: flex-start; }
+  .stats-summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 620px) {
+  .boot-state { min-height: 46vh; }
+  .admin-dialog-shell { width: min(100% - 14px, 1180px); max-height: calc(100vh - 14px); }
+  .admin-dialog-card { max-height: calc(100vh - 14px); padding: 17px 14px; border-radius: 17px; }
+  .admin-dialog-head, .admin-demo-panel.admin-dashboard-panel, .admin-stats-head { flex-direction: column; }
+  .admin-dialog-head { gap: 10px; padding-right: 28px; }
+  .admin-demo-actions, .stats-controls { width: 100%; justify-content: flex-start; }
+  .admin-tabs { overflow-x: auto; }
+  .admin-tab { flex: 0 0 auto; }
+  .admin-user-card { grid-template-columns: 1fr; }
+  .stats-chart { min-height: 72px; }
+  .stats-chart svg { height: 88px; }
+  .oge-task-card { height: 178px; min-height: 178px; max-height: 178px; }
+}

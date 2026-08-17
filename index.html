@@ -35,48 +35,63 @@
     <div class="access-card">
       <span class="gold-kicker">PROTECTED NAVIGATOR</span>
       <h2>Тематический поиск по заданиям ОГЭ ФИПИ</h2>
-      <p>Полный каталог доступен участникам VK Donut или по приглашению администратора. Для знакомства с возможностями Navigator откройте DEMO-версию.</p>
+      <p>Полный каталог доступен только приглашённым пользователям. Для знакомства с возможностями Navigator можно открыть ограниченную DEMO-версию.</p>
 
       <div id="accessMessage" class="access-message hidden"></div>
 
       <div class="access-actions">
-        <button id="openDonutButton" class="button primary access-main-button" type="button">Войти через VK Donut</button>
         <button id="openLoginButton" class="button primary access-main-button" type="button">Войти</button>
         <button id="openDemoButton" class="button secondary access-main-button" type="button">Попробовать DEMO</button>
       </div>
-      <div class="admin-contact-actions">
-        <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
-          ✉ Нужен доступ? Напишите администратору
-        </a>
-        <button id="copyAdminTextButton" class="copy-contact-button" type="button">Скопировать текст</button>
-      </div>
+      <p class="access-note">Самостоятельная регистрация отключена. Полный доступ выдаётся только по приглашению администратора.</p>
+      <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
+        ✉ Нужен доступ? Напишите администратору
+      </a>
     </div>
   </section>
 
-  <main id="appShell" class="shell hidden">
-    <section class="hero-card">
-      <div class="hero-copy">
-        <span id="modeKicker" class="gold-kicker">LEXICAL FIRST</span>
-        <h2>Выберите тему — все задания уже разложены по формату ОГЭ.</h2>
-        <p>Одна тема может вести к нескольким заданиям ФИПИ из разных разделов. Используйте тему, подтему, статус и быстрый поиск.</p>
-      </div>
-      <div class="hero-stats">
-        <div class="stat"><span id="visibleCount">0</span><small>найдено</small></div>
-        <div class="stat"><span id="viewedCount">0</span><small>просмотрено</small></div>
-        <div class="stat"><span id="usedCount">0</span><small>использовано</small></div>
-      </div>
-    </section>
 
-    <section class="filters-card">
-      <div class="filter-grid">
+  <main id="appShell" class="oge-workspace hidden">
+    <section class="oge-control-deck">
+      <div class="oge-deck-head">
+        <div class="oge-deck-copy">
+          <span id="modeKicker" class="gold-kicker">LEXICAL FIRST · 11 EXAM BUCKETS</span>
+          <h2>Выберите тему — и соберите задания ОГЭ в одной строке</h2>
+          <p>Тема — главный вход в каталог. Раздел экзамена показывает, где эта тема встречается.</p>
+        </div>
+
+        <div class="oge-hero-stats" aria-label="Статистика выборки">
+          <div class="oge-stat">
+            <strong id="visibleCount">0</strong>
+            <span>карточек</span>
+          </div>
+          <div class="oge-stat">
+            <strong id="viewedCount">0</strong>
+            <span>просмотрено</span>
+          </div>
+          <div class="oge-stat accent">
+            <strong id="usedCount">0</strong>
+            <span>использовано</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="oge-filter-grid">
         <label>
           <span>Тема</span>
           <select id="topicSelect"></select>
         </label>
+
         <label>
           <span>Подтема</span>
           <select id="subtopicSelect"></select>
         </label>
+
+        <label>
+          <span>Раздел ОГЭ</span>
+          <select id="bucketSelect"></select>
+        </label>
+
         <label>
           <span>Статус</span>
           <select id="statusSelect">
@@ -86,61 +101,36 @@
             <option value="used">Использованные</option>
           </select>
         </label>
-        <label class="search-field">
+
+        <label class="oge-search-label">
           <span>Быстрый поиск</span>
-          <input id="searchInput" type="search" placeholder="FIPI ID, КЭС, тема, ключевое слово…" />
+          <input id="searchInput" type="search" placeholder="FIPI ID, КЭС, тема, слово…" />
         </label>
+
+        <button id="resetButton" class="button ghost oge-reset-button" type="button">Сбросить</button>
       </div>
 
-      <div class="selection-line">
-        <div>
-          <span class="selection-label">Сейчас:</span>
-          <strong id="selectionTitle">Все темы</strong>
+      <div class="oge-current-row">
+        <div class="oge-current-selection">
+          <strong>Сейчас:</strong>
+          <span id="selectionTitle">Все темы</span>
         </div>
-        <button id="resetButton" class="link-button" type="button">Сбросить фильтры</button>
+        <div id="sectionMeta" class="oge-section-meta">—</div>
       </div>
     </section>
 
-    <section class="matrix-card">
-      <div class="matrix-toolbar">
-        <div>
-          <span class="gold-kicker">EXAM MATRIX</span>
-          <h3>Задания по разделам экзамена</h3>
-        </div>
-        <div class="legend" aria-label="Легенда статусов">
-          <span><i class="dot new"></i> новое</span>
-          <span><i class="dot viewed"></i> просмотрено</span>
-          <span><i class="dot used"></i> использовано</span>
+    <section class="oge-matrix-shell" aria-label="Матрица заданий ОГЭ">
+      <button id="scrollLeftButton" class="oge-matrix-arrow oge-matrix-arrow-left" type="button" aria-label="Прокрутить матрицу влево">‹</button>
+      <button id="scrollRightButton" class="oge-matrix-arrow oge-matrix-arrow-right" type="button" aria-label="Прокрутить матрицу вправо">›</button>
+
+      <div id="matrixViewport" class="oge-matrix-viewport" tabindex="0">
+        <div id="matrix" class="oge-matrix"></div>
+
+        <div id="emptyState" class="oge-empty hidden">
+          <strong>Ничего не найдено</strong>
+          <span>Измените тему, подтему, раздел, статус или строку поиска.</span>
         </div>
       </div>
-
-      <div class="matrix-scroll">
-        <div id="matrix" class="matrix"></div>
-      </div>
-
-      <div id="emptyState" class="empty hidden">
-        <div class="empty-icon">◇</div>
-        <h4>В этой выборке нет заданий</h4>
-        <p>Попробуйте изменить тему, подтему, статус или строку поиска.</p>
-      </div>
-    </section>
-
-    <section class="info-grid single-info">
-      <article class="info-card">
-        <span class="gold-kicker">AUTOMATION</span>
-        <h3>Автоклассификация</h3>
-        <p>Каталог уже классифицирован по тематическому содержанию ФИПИ 5–9. Одно задание может одновременно относиться к нескольким подходящим темам и подтемам.</p>
-        <div class="confidence-demo">
-          <span>Путешествия <b>96%</b></span>
-          <span>Транспорт <b>91%</b></span>
-          <span>Страны и культура <b>68%</b></span>
-        </div>
-      </article>
-    </section>
-
-    <section class="prototype-note">
-      <strong>v0.9.2 TEST · FIPI Navigator.</strong>
-      <span>Подключён защищённый каталог: 1735 заданий ФИПИ. Темы и подтемы работают по multi-label меткам.</span>
     </section>
   </main>
 
@@ -236,20 +226,6 @@
         </div>
       </section>
 
-      <section class="admin-stats-panel">
-        <div class="admin-users-head">
-          <div><span class="admin-section-label">СТАТИСТИКА</span><div id="statsPeriodLabel" class="admin-user-stats">Последние 30 дней</div></div>
-          <div class="stats-controls">
-            <select id="statsPeriodSelect"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option><option value="custom">Свой период</option></select>
-            <input id="statsFromDate" class="hidden" type="date" />
-            <input id="statsToDate" class="hidden" type="date" />
-            <button id="refreshStatsButton" class="button ghost compact" type="button">Показать</button>
-          </div>
-        </div>
-        <div class="stats-summary"><div><strong id="statsVisits">0</strong><span>входов</span></div><div><strong id="statsUnique">0</strong><span>пользователей</span></div><div><strong id="statsEmail">0</strong><span>email-входов</span></div><div><strong id="statsDonut">0</strong><span>Donut-входов</span></div></div>
-        <div id="statsChart" class="stats-chart" aria-label="График посещений"></div>
-      </section>
-
       <section class="admin-users-panel">
         <div class="admin-users-head">
           <div>
@@ -313,7 +289,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>

@@ -16,16 +16,16 @@
       <a class="brand-logo-link" href="https://vk.ru/dreamteamenglish" target="_blank" rel="noopener noreferrer" aria-label="Копилочка Английского — VK">
         <img id="brandLogo" class="brand-logo" src="assets/brand-logo.png" alt="Копилочка Английского" />
       </a>
-      <div>
-        <div class="eyebrow">TEACHER WORKSPACE</div>
+      <div class="brand-line">
+        <span class="eyebrow">TEACHER WORKSPACE</span>
         <h1>OGE Lexical Navigator</h1>
-        <p>Тематический навигатор по открытому банку заданий ФИПИ · English</p>
+        <span class="brand-inline-note">Тематический навигатор по открытому банку заданий ФИПИ · English</span>
       </div>
     </div>
 
     <div class="auth-area">
       <span id="cloudBadge" class="cloud-badge protected">PROTECTED</span>
-      <button id="adminAccessButton" class="button secondary hidden" type="button">⚙ Управление доступом</button>
+      <button id="adminAccessButton" class="button secondary hidden" type="button">⚙ Доступ</button>
       <button id="headerLoginButton" class="button secondary hidden" type="button">Войти</button>
       <button id="signOutButton" class="button ghost hidden" type="button">Выйти</button>
     </div>
@@ -69,47 +69,37 @@
     <section class="oge-control-deck">
       <div class="oge-deck-head">
         <div class="oge-deck-copy">
-          <span id="modeKicker" class="gold-kicker">LEXICAL FIRST · 11 EXAM BUCKETS</span>
+          <span id="modeKicker" class="gold-kicker oge-mode-kicker-hidden">LEXICAL FIRST</span>
           <h2>Выберите тему — и соберите задания ОГЭ в одной строке</h2>
-          <p>Тема — главный вход в каталог. Раздел экзамена показывает, где эта тема встречается.</p>
         </div>
 
         <div class="oge-hero-stats" aria-label="Статистика выборки">
-          <div class="oge-stat">
-            <strong id="visibleCount">0</strong>
-            <span>карточек</span>
-          </div>
-          <div class="oge-stat">
-            <strong id="viewedCount">0</strong>
-            <span>просмотрено</span>
-          </div>
-          <div class="oge-stat accent">
-            <strong id="usedCount">0</strong>
-            <span>использовано</span>
-          </div>
+          <div class="oge-stat"><strong id="visibleCount">0</strong><span>карточек</span></div>
+          <div class="oge-stat"><strong id="viewedCount">0</strong><span>просмотрено</span></div>
+          <div class="oge-stat accent"><strong id="usedCount">0</strong><span>использовано</span></div>
         </div>
       </div>
 
       <div class="oge-filter-grid">
         <label>
-          <span>Тема</span>
-          <select id="topicSelect"></select>
+          <span class="sr-only">Тема</span>
+          <select id="topicSelect" aria-label="Тема"></select>
         </label>
 
         <label>
-          <span>Подтема</span>
-          <select id="subtopicSelect"></select>
+          <span class="sr-only">Подтема</span>
+          <select id="subtopicSelect" aria-label="Подтема"></select>
         </label>
 
         <label>
-          <span>Раздел ОГЭ</span>
-          <select id="bucketSelect"></select>
+          <span class="sr-only">Раздел ОГЭ</span>
+          <select id="bucketSelect" aria-label="Раздел ОГЭ"></select>
         </label>
 
         <label>
-          <span>Статус</span>
-          <select id="statusSelect">
-            <option value="all">Все</option>
+          <span class="sr-only">Статус</span>
+          <select id="statusSelect" aria-label="Статус">
+            <option value="all">Статус</option>
             <option value="new">Новые</option>
             <option value="viewed">Просмотренные</option>
             <option value="used">Использованные</option>
@@ -117,19 +107,11 @@
         </label>
 
         <label class="oge-search-label">
-          <span>Быстрый поиск</span>
-          <input id="searchInput" type="search" placeholder="FIPI ID, КЭС, тема, слово…" />
+          <span class="sr-only">Быстрый поиск</span>
+          <input id="searchInput" type="search" aria-label="Быстрый поиск" placeholder="Быстрый поиск: FIPI ID, КЭС, тема, слово…" />
         </label>
 
         <button id="resetButton" class="button ghost oge-reset-button" type="button">Сбросить</button>
-      </div>
-
-      <div class="oge-current-row">
-        <div class="oge-current-selection">
-          <strong>Сейчас:</strong>
-          <span id="selectionTitle">Все темы</span>
-        </div>
-        <div id="sectionMeta" class="oge-section-meta">—</div>
       </div>
     </section>
 
@@ -224,53 +206,52 @@
       <button id="closeAdminAccessDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
 
       <div class="admin-dialog-head">
-        <div>
+        <div class="admin-title-block">
           <span class="gold-kicker">OGE ADMIN</span>
           <h3>Участники и доступ</h3>
-          <p>Тот же компактный принцип панели, что в EGE, но все данные и действия — только OGE.</p>
         </div>
-        <button id="refreshAdminUsersButton" class="button ghost" type="button">↻ Обновить</button>
+
+        <div class="admin-toolbar" aria-label="Управление">
+          <span id="adminDemoState" class="hidden" aria-hidden="true"></span>
+          <button id="toggleDemoButton" class="admin-toolbar-button" type="button">DEMO: —</button>
+          <button id="previewDemoButton" class="admin-toolbar-button" type="button">Открыть DEMO ↗</button>
+          <button id="ogeBackupPreviewButton" class="admin-toolbar-button" type="button">PREVIEW: —</button>
+          <button id="ogeBackupSourceButton" class="admin-toolbar-button source" type="button">Источник: FIPI</button>
+          <button id="refreshAdminUsersButton" class="admin-toolbar-button refresh" type="button">↻ Обновить</button>
+        </div>
       </div>
 
-      <section class="admin-demo-panel admin-dashboard-panel">
-        <div>
-          <span class="admin-section-label">PUBLIC DEMO</span>
-          <div class="admin-demo-state-line">
-            <strong id="adminDemoState">Проверяю…</strong>
-            <span>44 демонстрационные карточки OGE</span>
-          </div>
-        </div>
-        <div class="admin-demo-actions">
-          <button id="toggleDemoButton" class="button secondary" type="button">—</button>
-          <button id="previewDemoButton" class="button ghost" type="button">Открыть DEMO ↗</button>
-        </div>
-      </section>
-
       <section class="admin-stats-panel admin-dashboard-panel">
-        <div class="admin-stats-head">
-          <div>
-            <span class="admin-section-label">СТАТИСТИКА ВХОДОВ</span>
-            <div id="statsPeriodLabel" class="admin-user-stats">Последние 30 дней</div>
-          </div>
+        <div class="admin-stats-compact">
+          <span class="admin-section-label admin-stats-label">СТАТИСТИКА ВХОДОВ</span>
+
           <div class="stats-controls">
-            <select id="statsPeriodSelect">
+            <select id="statsPeriodSelect" aria-label="Период статистики">
               <option value="7">7 дней</option>
               <option value="30" selected>30 дней</option>
               <option value="90">90 дней</option>
               <option value="custom">Свой период</option>
             </select>
-            <input id="statsFromDate" class="hidden" type="date" />
-            <input id="statsToDate" class="hidden" type="date" />
-            <button id="refreshStatsButton" class="button ghost compact" type="button">Показать</button>
+            <input id="statsFromDate" class="hidden" type="date" aria-label="Начало периода" />
+            <input id="statsToDate" class="hidden" type="date" aria-label="Конец периода" />
+            <button id="refreshStatsButton" class="admin-toolbar-button compact" type="button">Показать</button>
           </div>
+
+          <div class="stats-inline-summary" aria-label="Сводка статистики">
+            <span><strong id="statsVisits">0</strong> входов</span>
+            <span><strong id="statsUnique">0</strong> пользователей</span>
+            <span><strong id="statsEmail">0</strong> email</span>
+            <span><strong id="statsDonut">0</strong> VK Donut</span>
+            <span class="platform-stat github"><strong id="statsGithub">0</strong> GitHub</span>
+            <span class="platform-stat yandex"><strong id="statsYandex">0</strong> Яндекс</span>
+          </div>
+
+          <div id="statsPeriodLabel" class="stats-period-label">—</div>
         </div>
-        <div class="stats-summary">
-          <div><strong id="statsVisits">0</strong><span>входов</span></div>
-          <div><strong id="statsUnique">0</strong><span>пользователей</span></div>
-          <div><strong id="statsEmail">0</strong><span>email</span></div>
-          <div><strong id="statsDonut">0</strong><span>VK Donut</span></div>
+
+        <div id="statsChart" class="stats-chart" aria-label="График посещений">
+          <div id="statsTooltip" class="stats-tooltip hidden" role="tooltip"></div>
         </div>
-        <div id="statsChart" class="stats-chart" aria-label="График посещений"></div>
       </section>
 
       <div class="admin-tabs" role="tablist">
@@ -283,21 +264,16 @@
       </div>
 
       <section id="adminParticipantsPanel" class="admin-panel">
-        <div class="admin-panel-note">
-          Приглашённые email-пользователи OGE: уровень FULL/DEMO, статус и срок доступа.
-        </div>
         <div id="adminUserStats" class="admin-user-stats admin-user-stats-top">Загрузка…</div>
         <div id="adminUsersList" class="admin-user-list"></div>
       </section>
 
       <section id="adminDonutPanel" class="admin-panel hidden">
-        <div class="admin-panel-note">
-          Реестр OGE VK Donut. Активная техническая сессия показана отдельно; точную дату оплаты/продления VK не передаёт.
-        </div>
         <div id="adminDonutList" class="admin-user-list"></div>
       </section>
     </div>
   </dialog>
+
 
   <dialog id="userAccessDialog">
     <div class="dialog-card user-access-card">

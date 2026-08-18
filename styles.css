@@ -1597,3 +1597,483 @@ body.oge-workspace-mode .prototype-note {
   .stats-chart svg { height: 88px; }
   .oge-task-card { height: 178px; min-height: 178px; max-height: 178px; }
 }
+
+
+/* ============================================================
+   v0.9.6 — COMPACT UI + ADMIN FIX
+   Viewer v0.2.3 / print CSS live inside app.js and are untouched.
+   ============================================================ */
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.oge-mode-kicker-hidden { display: none !important; }
+
+/* ---------- Compact topbar ---------- */
+body.oge-workspace-mode .topbar {
+  min-height: 50px;
+  padding: 5px 20px 5px !important;
+  align-items: center;
+}
+body.oge-workspace-mode .brand-logo-link {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  border-radius: 10px;
+}
+body.oge-workspace-mode .brand { gap: 10px; }
+body.oge-workspace-mode .brand-line {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+body.oge-workspace-mode .brand-line .eyebrow {
+  display: inline;
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 7px;
+  letter-spacing: .13em;
+}
+body.oge-workspace-mode .brand-line h1 {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 21px;
+  line-height: 1;
+}
+body.oge-workspace-mode .brand-inline-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #90a4ce;
+  font-size: 9px;
+}
+body.oge-workspace-mode .auth-area { gap: 6px; }
+body.oge-workspace-mode .cloud-badge {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 9px;
+}
+body.oge-workspace-mode .button {
+  min-height: 31px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
+/* ---------- Compact control deck ---------- */
+.oge-workspace {
+  padding: 5px 20px 8px !important;
+}
+.oge-control-deck {
+  padding: 8px 10px 8px !important;
+  border-radius: 14px;
+}
+.oge-deck-head { gap: 12px; }
+.oge-deck-copy h2 {
+  margin: 0;
+  font-size: clamp(17px, 1.75vw, 23px);
+  line-height: 1.06;
+}
+.oge-deck-copy p { display: none !important; }
+.oge-hero-stats { gap: 5px; }
+.oge-stat {
+  min-width: auto;
+  padding: 4px 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  border-radius: 999px;
+}
+.oge-stat strong {
+  display: inline;
+  font-size: 13px;
+}
+.oge-stat span {
+  font-size: 7px;
+  letter-spacing: .045em;
+}
+.oge-filter-grid {
+  margin-top: 7px;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(150px, 1fr)
+    minmax(158px, .92fr)
+    minmax(115px, .65fr)
+    minmax(230px, 1.25fr)
+    auto;
+  gap: 6px;
+}
+.oge-filter-grid label { position: relative; }
+.oge-filter-grid input,
+.oge-filter-grid select {
+  min-height: 32px;
+  height: 32px;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+.oge-reset-button {
+  min-height: 32px !important;
+  height: 32px;
+  padding-inline: 10px !important;
+}
+.oge-current-row { display: none !important; }
+.oge-matrix-shell {
+  margin-top: 5px;
+  border-radius: 13px;
+}
+
+/* ---------- More cards on screen ---------- */
+.oge-bucket-head {
+  min-height: 57px;
+  padding: 7px 8px 6px;
+}
+.oge-bucket-section { font-size: 7px; }
+.oge-bucket-head h3 {
+  margin: 2px 0;
+  font-size: 12.5px;
+  line-height: 1.12;
+}
+.oge-bucket-range { font-size: 9px; }
+.oge-bucket-count { font-size: 7px; }
+
+.oge-card-stack {
+  gap: 6px;
+  padding: 7px 7px 12px;
+}
+.oge-task-card {
+  height: 148px !important;
+  min-height: 148px !important;
+  max-height: 148px !important;
+  padding: 8px 9px 7px !important;
+  border-radius: 11px;
+}
+.oge-task-card.status-viewed,
+.oge-task-card.status-used { padding-left: 7px !important; }
+.oge-fipi-ref { font-size: 10px; }
+.oge-topic-edit-button {
+  width: 27px;
+  height: 27px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.oge-kes-line {
+  margin-top: 5px;
+  font-size: 9px;
+  line-height: 1.25;
+}
+.oge-topic-tags {
+  margin-top: 5px;
+  gap: 3px;
+  max-height: 46px !important;
+}
+.oge-topic-tag {
+  padding: 3px 5px;
+  font-size: 7px;
+}
+.oge-card-footer {
+  margin-top: 5px;
+  padding-top: 5px;
+}
+.oge-status-button {
+  min-height: 23px;
+  padding: 0 6px;
+  font-size: 7px;
+}
+.oge-open-hint { font-size: 7px; }
+
+/* ---------- Compact admin ---------- */
+.admin-dialog-shell {
+  width: min(1220px, calc(100% - 20px));
+  max-height: calc(100vh - 20px);
+}
+.admin-dialog-card {
+  max-height: calc(100vh - 20px);
+  padding: 15px 16px 12px;
+  border-radius: 18px;
+}
+.admin-dialog-head {
+  align-items: center;
+  gap: 12px;
+  padding-right: 28px;
+}
+.admin-title-block { flex: 0 0 auto; }
+.admin-dialog-head h3 {
+  margin: 2px 0 0;
+  font-size: 23px;
+}
+.admin-dialog-head p { display: none; }
+
+.admin-toolbar {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.admin-toolbar-button {
+  min-height: 31px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(122,163,255,.20);
+  background: rgba(255,255,255,.035);
+  color: #c8d6ef;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.admin-toolbar-button:hover {
+  border-color: rgba(229,189,98,.48);
+  color: #f2d68a;
+}
+.admin-toolbar-button.active-state {
+  border-color: rgba(80,193,151,.35);
+  background: rgba(30,139,101,.11);
+  color: #b9ecd7;
+}
+.admin-toolbar-button.source.active-state {
+  border-color: rgba(229,189,98,.42);
+  background: rgba(229,189,98,.08);
+  color: #f3dc98;
+}
+.admin-toolbar-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.admin-toolbar-button.refresh { color: #dce7ff; }
+.admin-toolbar-button.compact { min-height: 29px; }
+
+.admin-dashboard-panel {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 10px;
+}
+.admin-stats-panel.admin-dashboard-panel { padding-bottom: 6px; }
+.admin-stats-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.admin-stats-label {
+  margin: 0;
+  flex: 0 0 auto;
+}
+.stats-controls {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+.stats-controls select,
+.stats-controls input {
+  min-height: 29px;
+  height: 29px;
+  padding: 0 7px;
+  font-size: 9px;
+}
+.stats-inline-summary {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 auto;
+  color: #8fa4cd;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.stats-inline-summary span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.stats-inline-summary strong {
+  color: #f4d784;
+  font-size: 13px;
+}
+.stats-inline-summary .github strong { color: #dbe5fa; }
+.stats-inline-summary .yandex strong { color: #f4d784; }
+.stats-period-label {
+  flex: 0 0 auto;
+  color: #6f86b3;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.stats-chart {
+  position: relative;
+  min-height: 66px;
+  max-height: 78px;
+  margin-top: 3px;
+  overflow: visible;
+}
+.stats-chart svg {
+  width: 100%;
+  height: 72px;
+  display: block;
+}
+.stats-line { stroke-width: 1.9; }
+.stats-dot { cursor: pointer; }
+.stats-dot:hover,
+.stats-dot:focus { r: 5; outline: none; }
+.stats-tooltip {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -100%);
+  min-width: 98px;
+  padding: 5px 7px;
+  border: 1px solid rgba(229,189,98,.38);
+  border-radius: 7px;
+  background: rgba(3,12,31,.97);
+  box-shadow: 0 8px 22px rgba(0,0,0,.34);
+  pointer-events: none;
+  text-align: center;
+}
+.stats-tooltip strong,
+.stats-tooltip span { display: block; }
+.stats-tooltip strong { color: #f0d487; font-size: 9px; }
+.stats-tooltip span { margin-top: 2px; color: #c6d3ea; font-size: 8px; }
+
+.admin-tabs {
+  margin-top: 7px;
+  padding-bottom: 6px;
+}
+.admin-tab {
+  min-height: 33px;
+  padding: 0 11px;
+  font-size: 10px;
+}
+.admin-panel {
+  padding-top: 5px;
+}
+.admin-user-stats-top {
+  margin: 2px 1px 4px;
+}
+.admin-user-list {
+  gap: 6px;
+  margin-top: 5px;
+}
+.admin-user-card {
+  grid-template-columns: minmax(205px,1.35fr) minmax(145px,.75fr) minmax(165px,.86fr) auto;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.admin-user-name { font-size: 11px; }
+.admin-user-chips { margin-top: 4px; }
+.admin-chip { padding: 2px 5px; }
+.admin-user-info { gap: 2px; font-size: 8px; }
+.admin-mini-button { min-height: 28px; padding: 0 8px; }
+
+/* ---------- Responsive compactness ---------- */
+@media (max-width: 1180px) {
+  .oge-filter-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+  .oge-search-label { grid-column: span 2; }
+  .admin-stats-compact { flex-wrap: wrap; }
+  .stats-inline-summary { order: 3; flex-basis: 100%; overflow: visible; flex-wrap: wrap; }
+  .stats-period-label { margin-left: auto; }
+}
+
+@media (max-width: 760px) {
+  body.oge-workspace-mode .topbar {
+    padding: 4px 8px !important;
+    align-items: center;
+    gap: 6px;
+  }
+  body.oge-workspace-mode .brand-logo-link {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+  body.oge-workspace-mode .brand-line { gap: 5px; }
+  body.oge-workspace-mode .brand-line .eyebrow { display: none; }
+  body.oge-workspace-mode .brand-line h1 { font-size: 17px; }
+  body.oge-workspace-mode .brand-inline-note { display: none; }
+  body.oge-workspace-mode .auth-area { gap: 3px; }
+  body.oge-workspace-mode .cloud-badge {
+    min-height: 26px;
+    padding-inline: 6px;
+    font-size: 8px;
+  }
+  body.oge-workspace-mode .button {
+    min-height: 28px;
+    padding-inline: 7px;
+    font-size: 9px;
+  }
+
+  .oge-workspace { padding: 4px 5px 6px !important; }
+  .oge-control-deck { padding: 6px !important; border-radius: 11px; }
+  .oge-deck-copy h2 { font-size: 15px; }
+  .oge-stat { padding: 3px 6px; }
+  .oge-stat strong { font-size: 11px; }
+  .oge-stat span { font-size: 6px; }
+
+  .oge-filter-grid {
+    margin-top: 5px;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .oge-filter-grid input,
+  .oge-filter-grid select {
+    min-height: 30px;
+    height: 30px;
+    font-size: 9px;
+  }
+  .oge-search-label { grid-column: 1 / -1; }
+  .oge-reset-button {
+    grid-column: 1 / -1;
+    min-height: 28px !important;
+    height: 28px;
+  }
+  .oge-matrix-shell { margin-top: 4px; }
+
+  .oge-task-card {
+    height: 146px !important;
+    min-height: 146px !important;
+    max-height: 146px !important;
+  }
+
+  .admin-dialog-card { padding: 12px 10px 9px; }
+  .admin-dialog-head {
+    align-items: flex-start;
+    padding-right: 24px;
+  }
+  .admin-title-block { flex: 1 1 100%; }
+  .admin-dialog-head h3 { font-size: 19px; }
+  .admin-toolbar {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .admin-toolbar-button { min-height: 29px; font-size: 8px; }
+  .admin-stats-compact { align-items: flex-start; }
+  .stats-inline-summary {
+    gap: 7px;
+    white-space: normal;
+  }
+  .stats-chart { min-height: 58px; max-height: 66px; }
+  .stats-chart svg { height: 60px; }
+  .admin-user-card { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  :root { --oge-col-width: min(82vw, 286px); }
+  .oge-deck-head { align-items: center; }
+  .oge-deck-copy h2 { font-size: 14px; }
+  .oge-hero-stats .oge-stat:nth-child(2),
+  .oge-hero-stats .oge-stat:nth-child(3) { display: none; }
+  .stats-period-label { display: none; }
+}

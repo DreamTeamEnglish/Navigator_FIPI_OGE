@@ -1,4 +1,4 @@
-// Navigator_FIPI_OGE v0.9.4.2 — TRUE no-flicker + dual-host VK Donut
+// Navigator_FIPI_OGE v0.9.6.2 — DONUT BACKUP ACCESS · backup viewer v0.2.3 UNCHANGED
 (() => {
   'use strict';
 
@@ -19,6 +19,9 @@
   });
   const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
   const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
+  const BACKUP_GATEWAY_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-backup-gateway`;
+  const BACKUP_PREVIEW_KEY = 'oge-backup-admin-preview-v020';
+  const BACKUP_VIEWER_RENDER_VERSION = '0.2.3';
 
   const el = {
     bootState: document.querySelector('#bootState'),
@@ -78,7 +81,7 @@
     adminParticipantsBadge: document.querySelector('#adminParticipantsBadge'),
     adminDonutBadge: document.querySelector('#adminDonutBadge'),
     refreshAdminUsersButton: document.querySelector('#refreshAdminUsersButton'),
-    statsPeriodSelect: document.querySelector('#statsPeriodSelect'), statsFromDate: document.querySelector('#statsFromDate'), statsToDate: document.querySelector('#statsToDate'), refreshStatsButton: document.querySelector('#refreshStatsButton'), statsPeriodLabel: document.querySelector('#statsPeriodLabel'), statsVisits: document.querySelector('#statsVisits'), statsUnique: document.querySelector('#statsUnique'), statsEmail: document.querySelector('#statsEmail'), statsDonut: document.querySelector('#statsDonut'), statsChart: document.querySelector('#statsChart'),
+    statsPeriodSelect: document.querySelector('#statsPeriodSelect'), statsFromDate: document.querySelector('#statsFromDate'), statsToDate: document.querySelector('#statsToDate'), refreshStatsButton: document.querySelector('#refreshStatsButton'), statsPeriodLabel: document.querySelector('#statsPeriodLabel'), statsVisits: document.querySelector('#statsVisits'), statsUnique: document.querySelector('#statsUnique'), statsEmail: document.querySelector('#statsEmail'), statsDonut: document.querySelector('#statsDonut'), statsGithub: document.querySelector('#statsGithub'), statsYandex: document.querySelector('#statsYandex'), statsChart: document.querySelector('#statsChart'), statsTooltip: document.querySelector('#statsTooltip'),
 
     userAccessDialog: document.querySelector('#userAccessDialog'),
     closeUserAccessDialogButton: document.querySelector('#closeUserAccessDialogButton'),
@@ -120,12 +123,24 @@
   let donutUserId = null;
   let adminDonutSessions = [];
   let adminStatsUsers = new Map();
+  let adminDonutLoadError = '';
   let initialBootPending = true;
   let resumeValidationInFlight = false;
   let resumeValidationTimer = null;
+  let backupRuntime = { content_source: 'fipi', yandex_backup_ready: false, backup_version: '0.1.0' };
+  let backupPreviewEnabled = sessionStorage.getItem(BACKUP_PREVIEW_KEY) === '1';
+  let backupObjectUrls = [];
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
+  }
+
+  function currentPlatform() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host.endsWith('github.io')) return 'github';
+    if (host.endsWith('yandexcloud.net')) return 'yandex';
+    if (host.endsWith('gitverse.site')) return 'gitverse';
+    return 'other';
   }
 
   function isCloudConfigured() {
@@ -401,7 +416,7 @@
     if (!el.bucket) return;
     const previous = el.bucket.value || 'all';
     const options = [
-      '<option value="all">Все 11 разделов</option>',
+      '<option value="all">Все 11 разделов ОГЭ</option>',
       ...DATA.buckets.map(bucket => {
         const range = bucket.range ? ` · ${bucket.range}` : '';
         return `<option value="${escapeAttr(bucket.id)}">${escapeHtml(bucket.section)} · ${escapeHtml(bucket.title)}${escapeHtml(range)}</option>`;
@@ -447,6 +462,837 @@
       const searchMatch = !search || haystack.includes(search);
       return topicMatch && subtopicMatch && bucketMatch && statusMatch && searchMatch;
     });
+  }
+
+  function backupIsActiveForCards() {
+    if (!backupRuntime?.yandex_backup_ready) return false;
+
+    // Personal admin PREVIEW never affects anybody else.
+    if (appMode === 'admin' && currentUser && backupPreviewEnabled) return true;
+
+    // Global source applies to every working FULL mode:
+    // approved email FULL and active VK Donut FULL.
+    if (appMode === 'donut') {
+      return backupRuntime.content_source === 'yandex_backup';
+    }
+    if (!currentUser || !['admin','teacher'].includes(appMode)) return false;
+    return backupRuntime.content_source === 'yandex_backup';
+  }
+
+  async function refreshBackupRuntime() {
+    if (!supabaseClient) return backupRuntime;
+
+    try {
+      let data;
+      let error;
+
+      if (appMode === 'donut') {
+        // Donut has no Supabase Auth JWT. This RPC exposes only the harmless
+        // global source/ready/version flags; access to actual backup content
+        // is still checked server-side by oge-backup-gateway.
+        ({ data, error } = await supabaseClient.rpc('oge_backup_runtime_public_v0962'));
+      } else {
+        if (!currentUser || (!['admin','teacher'].includes(appMode) &&
+            currentProfile?.role !== 'admin' && currentProfile?.role !== 'teacher')) {
+          return backupRuntime;
+        }
+        ({ data, error } = await supabaseClient.rpc('oge_backup_runtime_config'));
+      }
+
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) backupRuntime = { ...backupRuntime, ...row };
+    } catch (error) {
+      console.warn('OGE backup runtime unavailable:', error);
+    }
+
+    renderBackupAdminState();
+    return backupRuntime;
+  }
+
+  function revokeBackupObjectUrls() {
+    backupObjectUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch {} });
+    backupObjectUrls = [];
+  }
+
+  function ensureBackupViewerUi() {
+    if (!document.querySelector('#ogeBackupViewer')) {
+      const dialog = document.createElement('dialog');
+      dialog.id = 'ogeBackupViewer';
+      dialog.className = 'oge-backup-dialog';
+      dialog.innerHTML = `
+        <div class="oge-backup-card">
+          <div class="oge-backup-toolbar">
+            <button id="ogeBackupPrint" class="oge-backup-print" type="button">🖨 Печать / PDF</button>
+            <button id="ogeBackupClose" class="oge-backup-close" type="button" aria-label="Закрыть">×</button>
+          </div>
+          <div id="ogeBackupViewerBody"></div>
+        </div>`;
+      document.body.appendChild(dialog);
+      dialog.querySelector('#ogeBackupClose').addEventListener('click', () => dialog.close());
+      dialog.querySelector('#ogeBackupPrint').addEventListener('click', () => window.print());
+      dialog.addEventListener('close', revokeBackupObjectUrls);
+      dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    }
+
+    if (!document.querySelector('#ogeBackupViewerStyle')) {
+      const style = document.createElement('style');
+      style.id = 'ogeBackupViewerStyle';
+      style.textContent = `
+        .oge-backup-dialog{width:min(1040px,94vw);max-height:92vh;padding:0;border:1px solid rgba(214,171,73,.45);border-radius:18px;background:#07152f;color:#eef4ff;box-shadow:0 28px 80px rgba(0,0,0,.55)}
+        .oge-backup-dialog::backdrop{background:rgba(2,8,22,.78);backdrop-filter:blur(3px)}
+        .oge-backup-card{position:relative;padding:26px;overflow:auto;max-height:92vh;background:linear-gradient(180deg,#0a1d42 0%,#07152f 100%)}
+        .oge-backup-close{position:absolute;right:15px;top:12px;border:0;background:transparent;color:#e8c66a;font-size:30px;cursor:pointer}
+        .oge-backup-kicker{font-size:11px;letter-spacing:.16em;color:#e3bf5b;font-weight:800;text-transform:uppercase}
+        .oge-backup-title{margin:7px 42px 4px 0;font:700 clamp(25px,3vw,38px)/1.08 Georgia,serif;color:#fff}
+        .oge-backup-meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 20px}.oge-backup-chip{border:1px solid rgba(227,191,91,.35);border-radius:999px;padding:5px 9px;font-size:12px;color:#d8e4ff;background:rgba(255,255,255,.04)}
+        .oge-backup-section{margin:18px 0;padding:17px 18px;border-radius:14px;background:#fff;color:#14213b}.oge-backup-section h4{margin:0 0 10px;color:#17376d;font-size:13px;letter-spacing:.08em;text-transform:uppercase}.oge-backup-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;font-size:15px}
+        .oge-backup-media{display:grid;gap:12px}.oge-backup-media img{display:block;max-width:100%;height:auto;margin:auto;border-radius:10px}.oge-backup-media audio{width:100%}
+        .oge-backup-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}.oge-backup-table td{border:1px solid #cbd5e4;padding:7px 8px;vertical-align:top}.oge-backup-source-word{width:150px;font-weight:800;white-space:nowrap}.oge-backup-question{font-weight:700}.oge-backup-option-number{width:54px;white-space:nowrap}.oge-backup-group-list{display:grid;gap:12px;margin-top:8px}.oge-backup-group-item{display:grid;grid-template-columns:48px 1fr;gap:12px;padding:13px 14px;border:1px solid #d4dcea;border-radius:11px;background:#f8fafc}.oge-backup-group-item.is-current{border-color:#c99a32;box-shadow:0 0 0 1px rgba(201,154,50,.18)}.oge-backup-group-number{display:flex;align-items:flex-start;justify-content:center;font:800 18px/1.2 Georgia,serif;color:#17376d}.oge-backup-group-prompt{font-weight:700;line-height:1.45;margin-bottom:8px}.oge-backup-group-options{display:flex;flex-wrap:wrap;gap:7px 15px;color:#263b60}.oge-backup-group-option{white-space:nowrap}.oge-backup-exam-number{width:54px;text-align:center;font-weight:800;color:#17376d}.oge-backup-note{font-size:12px;color:#9db1da;margin-top:14px}.oge-backup-loading{padding:30px;text-align:center;color:#d9e4fb}
+        .oge-backup-toolbar{position:absolute;right:15px;top:12px;display:flex;align-items:center;gap:8px;z-index:2}.oge-backup-close{position:static!important;border:1px solid rgba(227,191,91,.55)!important;border-radius:8px!important;width:40px;height:40px;line-height:34px;background:rgba(255,255,255,.03)!important;color:#e8c66a!important;font-size:28px!important;cursor:pointer}.oge-backup-print{border:1px solid rgba(227,191,91,.4);border-radius:9px;padding:9px 12px;background:rgba(255,255,255,.05);color:#e7efff;font:inherit;font-size:13px;cursor:pointer}.oge-backup-print:hover,.oge-backup-close:hover{background:rgba(255,255,255,.1)!important}
+        .oge-backup-rubric-list{margin:0;padding-left:24px;display:grid;gap:7px}.oge-backup-answer-grid th,.oge-backup-answer-grid td{text-align:center}.oge-backup-answer-grid th:first-child,.oge-backup-answer-grid td:first-child{text-align:left;font-weight:700}.oge-backup-blank-cell{min-width:70px;height:34px}.oge-backup-short-answer td:first-child{width:60px;text-align:center;font-weight:800;color:#17376d}.oge-backup-short-answer td:last-child{width:42%;border-bottom:1px solid #7084a8}.oge-backup-listening-card{display:grid;grid-template-columns:48px 1fr;gap:12px;padding:13px 14px;border:1px solid #d4dcea;border-radius:11px;background:#f8fafc;margin:10px 0}.oge-backup-listening-card.is-current{border-color:#c99a32;box-shadow:0 0 0 1px rgba(201,154,50,.18)}.oge-backup-listening-number{font:800 18px/1.2 Georgia,serif;color:#17376d;text-align:center}.oge-backup-listening-prompt{font-weight:700;line-height:1.45;margin-bottom:8px}.oge-backup-listening-options{display:grid;gap:5px}.oge-backup-letter{white-space:pre-wrap;line-height:1.65}.oge-backup-answer-area{min-height:290px;padding:14px;border:1px solid #b8c4d7;border-radius:10px;background:#fff;outline:none;white-space:pre-wrap;line-height:1.65}.oge-backup-answer-area:empty::before{content:attr(data-placeholder);color:#8b98ad}.oge-backup-answer-hint{margin:0 0 10px;color:#50627f;font-size:13px}
+        .oge-backup-admin-panel{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.oge-backup-admin-actions{display:flex;gap:8px;flex-wrap:wrap}.oge-backup-admin-state{font-size:14px;color:#dce7ff;margin-top:5px}.oge-backup-admin-warn{font-size:11px;color:#9fb2d8;margin-top:5px;max-width:650px}
+        @media(max-width:640px){.oge-backup-card{padding:20px 14px}.oge-backup-section{padding:14px}.oge-backup-title{font-size:26px}.oge-backup-print{padding:7px 9px;font-size:12px}.oge-backup-toolbar{right:10px;top:9px}.oge-backup-listening-card{grid-template-columns:38px 1fr}}
+        @media print{
+          @page{margin:12mm}
+          html,body{background:#fff!important;color:#000!important;height:auto!important;overflow:visible!important}
+          body>*:not(#ogeBackupViewer){display:none!important}
+          #ogeBackupViewer{display:block!important;position:static!important;inset:auto!important;width:100%!important;max-width:none!important;max-height:none!important;height:auto!important;margin:0!important;padding:0!important;overflow:visible!important;border:0!important;border-radius:0!important;background:#fff!important;color:#000!important;box-shadow:none!important}
+          #ogeBackupViewer::backdrop{display:none!important;background:transparent!important}
+          .oge-backup-card{position:static!important;max-height:none!important;height:auto!important;overflow:visible!important;padding:0!important;background:#fff!important;color:#000!important}
+          .oge-backup-toolbar,.oge-backup-close,.oge-backup-print{display:none!important}
+          .oge-backup-kicker{color:#555!important}.oge-backup-title{color:#000!important;margin-right:0!important}.oge-backup-chip{color:#222!important;background:#fff!important;border-color:#bbb!important}
+          .oge-backup-section{background:#fff!important;color:#000!important;border:1px solid #d7d7d7!important;border-radius:0!important;box-shadow:none!important;margin:10px 0!important;padding:10px 12px!important;break-inside:auto}
+          .oge-backup-section h4{color:#000!important}.oge-backup-note{color:#555!important}.oge-backup-media img{max-height:none!important}.oge-backup-media audio{display:none!important}
+          .oge-backup-table,.oge-backup-table td,.oge-backup-table th{border-color:#aaa!important;color:#000!important;background:#fff!important}.oge-backup-group-item,.oge-backup-listening-card{background:#fff!important;border-color:#bbb!important;box-shadow:none!important;break-inside:avoid}.oge-backup-group-number,.oge-backup-listening-number,.oge-backup-exam-number{color:#000!important}
+          .oge-backup-answer-area{min-height:90mm;border:1px solid #aaa!important;border-radius:0!important;background:#fff!important;color:#000!important}.oge-backup-answer-area:empty::before{content:''}.oge-backup-answer-hint{color:#444!important}
+          tr{break-inside:avoid}.oge-backup-title,.oge-backup-meta,.oge-backup-section h4{break-after:avoid}
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  function ensureBackupAdminControls() {
+    const preview = document.querySelector('#ogeBackupPreviewButton');
+    const source = document.querySelector('#ogeBackupSourceButton');
+
+    if (preview && preview.dataset.bound !== '1') {
+      preview.dataset.bound = '1';
+      preview.addEventListener('click', toggleBackupPreview);
+    }
+    if (source && source.dataset.bound !== '1') {
+      source.dataset.bound = '1';
+      source.addEventListener('click', toggleBackupGlobalSource);
+    }
+    renderBackupAdminState();
+  }
+
+  function renderBackupAdminState() {
+    const state = document.querySelector('#ogeBackupAdminState');
+    const preview = document.querySelector('#ogeBackupPreviewButton');
+    const source = document.querySelector('#ogeBackupSourceButton');
+    const ready = Boolean(backupRuntime?.yandex_backup_ready);
+    const globalYandex = backupRuntime?.content_source === 'yandex_backup';
+
+    if (state) {
+      state.textContent = `Резерв: ${ready ? 'READY' : 'не готов'} · data v${backupRuntime?.backup_version || '—'} · viewer v${BACKUP_VIEWER_RENDER_VERSION} · глобально: ${globalYandex ? 'Яндекс' : 'FIPI'}${backupPreviewEnabled ? ' · у вас PREVIEW' : ''}`;
+    }
+    if (preview) {
+      preview.disabled = !ready;
+      preview.textContent = backupPreviewEnabled ? 'PREVIEW: ON' : 'PREVIEW: OFF';
+      preview.classList.toggle('active-state', backupPreviewEnabled);
+    }
+    if (source) {
+      source.disabled = !ready;
+      source.textContent = globalYandex ? 'Источник: Яндекс' : 'Источник: FIPI';
+      source.classList.toggle('active-state', globalYandex);
+    }
+  }
+
+  async function toggleBackupPreview() {
+    if (appMode !== 'admin' || !backupRuntime?.yandex_backup_ready) return;
+    backupPreviewEnabled = !backupPreviewEnabled;
+    if (backupPreviewEnabled) sessionStorage.setItem(BACKUP_PREVIEW_KEY, '1');
+    else sessionStorage.removeItem(BACKUP_PREVIEW_KEY);
+    renderBackupAdminState();
+    render();
+    showToast(backupPreviewEnabled ? '✓ Предпросмотр Яндекс-резерва включён только для вас' : '✓ Предпросмотр выключен');
+  }
+
+  async function toggleBackupGlobalSource() {
+    if (appMode !== 'admin' || !supabaseClient) return;
+    const next = backupRuntime?.content_source === 'yandex_backup' ? 'fipi' : 'yandex_backup';
+    const text = next === 'yandex_backup'
+      ? 'Переключить ВСЕХ FULL-пользователей (email + VK Donut) на Яндекс-резерв?'
+      : 'Вернуть ВСЕХ FULL-пользователей (email + VK Donut) на ФИПИ?';
+    if (!window.confirm(text)) return;
+    try {
+      const { data, error } = await supabaseClient.rpc('oge_backup_admin_set_content_source', { p_source: next });
+      if (error) throw error;
+      backupRuntime.content_source = String(data || next);
+      renderBackupAdminState();
+      render();
+      showToast(next === 'yandex_backup' ? '✓ Все FULL-пользователи переключены на Яндекс-резерв' : '✓ Все FULL-пользователи возвращены на ФИПИ');
+    } catch (error) {
+      console.error('Backup source switch failed:', error);
+      alert(`Не удалось переключить источник: ${error?.message || error}`);
+    }
+  }
+
+  function backupTextClean(value) {
+    return String(value ?? '')
+      .replace(/\r/g, '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function backupTextCmp(value) {
+    return backupTextClean(value).replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  function backupInstructionClean(value) {
+    return backupTextClean(value)
+      .replace(/\s*\n\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/\s+([,.;:!?])/g, '$1')
+      .replace(/\(\s+/g, '(')
+      .replace(/\s+\)/g, ')')
+      .replace(/(\d)\s*[–—-]\s*(\d)/g, '$1–$2')
+      .trim();
+  }
+
+  function detectBackupExamRange(value, groupCount) {
+    const text = backupInstructionClean(value);
+    const count = Number(groupCount || 0);
+    if (!text || count < 2) return null;
+    for (const match of text.matchAll(/(\d{1,2})\s*[–—-]\s*(\d{1,2})/g)) {
+      const start = Number(match[1]);
+      const end = Number(match[2]);
+      if (end >= start && (end - start + 1) === count) return { start, end };
+    }
+    return null;
+  }
+
+  function backupTableRows(tables) {
+    const seen = new Set();
+    const rows = [];
+    const visit = value => {
+      if (!Array.isArray(value)) return;
+      if (value.length && value.every(cell => !Array.isArray(cell))) {
+        const cells = value.map(cell => backupTextClean(cell)).filter(Boolean);
+        if (!cells.length) return;
+        const key = cells.map(backupTextCmp).join(' | ');
+        if (!seen.has(key)) {
+          seen.add(key);
+          rows.push(cells);
+        }
+        return;
+      }
+      value.forEach(visit);
+    };
+    visit(tables);
+    return rows;
+  }
+
+  function isGrammarSourceWord(value) {
+    const s = backupTextClean(value);
+    if (!s || s.length > 38 || /[.!?,;:]/.test(s)) return false;
+    const letters = s.replace(/[^A-Za-zА-ЯЁ]/g, '');
+    return letters.length > 0 && s === s.toUpperCase();
+  }
+
+  function grammarTableHtml(tables, range = null) {
+    const rows = backupTableRows(tables);
+    const pairs = [];
+    const seen = new Set();
+
+    for (const cells of rows) {
+      if (cells.length !== 2) continue;
+      const left = backupTextClean(cells[0]);
+      const right = backupTextClean(cells[1]);
+      if (left.length < 8 || !isGrammarSourceWord(right)) continue;
+      const key = `${backupTextCmp(left)}|${backupTextCmp(right)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push([left.replace(/\s+/g, ' '), right.replace(/\s+/g, ' ')]);
+    }
+
+    if (pairs.length < 2) return '';
+    const numbered = range && (range.end - range.start + 1) === pairs.length;
+    return `<table class="oge-backup-table oge-backup-grammar-table"><tbody>${pairs.map(([left,right], index) => `<tr>${numbered ? `<td class="oge-backup-exam-number">${range.start + index}</td>` : ''}<td>${escapeHtml(left)}</td><td class="oge-backup-source-word">${escapeHtml(right)}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function choiceTableModel(tables) {
+    const rows = backupTableRows(tables);
+    const options = [];
+    const optionSeen = new Set();
+
+    for (const cells of rows) {
+      if (cells.length < 2) continue;
+      const c = cells.filter(Boolean);
+      if (c.length < 2) continue;
+      const number = c[c.length - 2];
+      const value = c[c.length - 1];
+      if (!/^\d+[.)]?$/u.test(number) || !value || value.length > 220) continue;
+      const key = `${number}|${backupTextCmp(value)}`;
+      if (optionSeen.has(key)) continue;
+      optionSeen.add(key);
+      options.push([number, value.replace(/\s+/g, ' ')]);
+    }
+
+    if (options.length < 2 || options.length > 8) return null;
+
+    const optionValues = new Set(options.map(([,v]) => backupTextCmp(v)));
+    let prompt = '';
+    for (const cells of rows) {
+      if (cells.length !== 1) continue;
+      const candidate = backupTextClean(cells[0]).replace(/\s+/g, ' ');
+      const cmp = backupTextCmp(candidate);
+      if (candidate.length < 12 || candidate.length > 600) continue;
+      if (optionValues.has(cmp)) continue;
+      if (/^\d+[.)]?\s/u.test(candidate)) continue;
+      if (/^(true|false|not stated)$/i.test(candidate)) continue;
+      if (/\n\d+[.)]/.test(cells[0])) continue;
+      prompt = candidate;
+      break;
+    }
+
+    const promptRow = prompt ? `<tr><td colspan="2" class="oge-backup-question">${escapeHtml(prompt)}</td></tr>` : '';
+    const optionRows = options.map(([n,v]) => `<tr><td class="oge-backup-option-number">${escapeHtml(n)}</td><td>${escapeHtml(v)}</td></tr>`).join('');
+    return {
+      prompt,
+      options,
+      html: `<table class="oge-backup-table oge-backup-choice-table"><tbody>${promptRow}${optionRows}</tbody></table>`
+    };
+  }
+
+  function splitReadingGroupBody(bodyText, baseCondition) {
+    let body = backupTextClean(bodyText);
+    let condition = backupInstructionClean(baseCondition);
+    if (!body) return { condition, passage: '' };
+
+    const taskMarker = body.search(/(?:^|\n)Задание\s*№\s*\d+/iu);
+    if (taskMarker >= 0) body = backupTextClean(body.slice(0, taskMarker));
+
+    const instructionEnd = /соответствующую\s+выбранному\s+Вами\s+варианту\s+ответа\./iu;
+    const match = instructionEnd.exec(body);
+    if (match) {
+      const instruction = body.slice(0, match.index + match[0].length);
+      const passage = body.slice(match.index + match[0].length);
+      const cleanInstruction = backupInstructionClean(instruction);
+      if (cleanInstruction && !backupTextCmp(condition).includes(backupTextCmp(cleanInstruction))) {
+        condition = backupInstructionClean(`${condition} ${cleanInstruction}`);
+      }
+      return { condition, passage: backupTextClean(passage) };
+    }
+
+    return { condition, passage: body };
+  }
+
+  function readingGroupHtml(groupItems, range, currentFipiId) {
+    const items = (Array.isArray(groupItems) ? groupItems : [])
+      .slice()
+      .sort((a, b) => Number(a.local_position || 0) - Number(b.local_position || 0));
+
+    const blocks = [];
+    for (const item of items) {
+      const choice = choiceTableModel(item.tables);
+      if (!choice || !choice.prompt) continue;
+      const local = Number(item.local_position || 0);
+      const examNo = range && local > 0 ? range.start + local - 1 : local || '';
+      const options = (choice.options || []).map(([n, value]) =>
+        `<span class="oge-backup-group-option">${escapeHtml(n)} ${escapeHtml(value)}</span>`
+      ).join('');
+      blocks.push(`
+        <article class="oge-backup-group-item${String(item.fipi_id || '').toUpperCase() === String(currentFipiId || '').toUpperCase() ? ' is-current' : ''}">
+          <div class="oge-backup-group-number">${escapeHtml(examNo)}</div>
+          <div>
+            <div class="oge-backup-group-prompt">${escapeHtml(choice.prompt)}</div>
+            <div class="oge-backup-group-options">${options}</div>
+          </div>
+        </article>`);
+    }
+    return blocks.length ? `<div class="oge-backup-group-list">${blocks.join('')}</div>` : '';
+  }
+
+  function normalizeNumberedLines(value) {
+    return backupTextClean(value)
+      .replace(/(^|\n)\s*(\d{1,2}[.)])\s*\n\s*(?=\S)/g, '$1$2 ')
+      .replace(/(^|\n)\s*([A-FА-Е][.)])\s*\n\s*(?=\S)/g, '$1$2 ');
+  }
+
+  function backupGroupPosition(x) {
+    const direct = Number(x?.group_position || 0);
+    if (direct > 0) return direct;
+    const current = String(x?.fipi_id || '').toUpperCase();
+    const row = (Array.isArray(x?.group_items) ? x.group_items : [])
+      .find(item => String(item?.fipi_id || '').toUpperCase() === current);
+    return Number(row?.local_position || 0);
+  }
+
+  function parseTaskBlocks(value) {
+    const text = backupTextClean(value);
+    const re = /(?:^|\n)Задание\s*№\s*(\d+)\.\s*([^\n]*)/giu;
+    const matches = [...text.matchAll(re)];
+    return matches.map((match, index) => {
+      const start = match.index + match[0].length;
+      const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+      return {
+        number: Number(match[1]),
+        heading: backupInstructionClean(match[2] || ''),
+        body: backupTextClean(text.slice(start, end)),
+        markerIndex: match.index
+      };
+    });
+  }
+
+  function parseChoiceTextBlock(body) {
+    const text = backupTextClean(body);
+    const re = /(?:^|\n)\s*(\d+)[.)]\s*(?:\n\s*)?/g;
+    const matches = [...text.matchAll(re)];
+    if (matches.length < 2) return null;
+    const prompt = backupTextClean(text.slice(0, matches[0].index));
+    const options = matches.map((match, index) => {
+      const start = match.index + match[0].length;
+      const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+      return [match[1], backupInstructionClean(text.slice(start, end))];
+    }).filter(([,value]) => value);
+    return prompt && options.length >= 2 ? { prompt: backupInstructionClean(prompt), options } : null;
+  }
+
+  function listeningChoiceGroupHtml(blocks, currentNo) {
+    const cards = [];
+    for (const block of blocks.filter(block => block.number >= 1 && block.number <= 4)) {
+      const parsed = parseChoiceTextBlock(block.body);
+      if (!parsed) continue;
+      cards.push(`<article class="oge-backup-listening-card${block.number === currentNo ? ' is-current' : ''}">
+        <div class="oge-backup-listening-number">${block.number}</div>
+        <div><div class="oge-backup-listening-prompt">${escapeHtml(parsed.prompt)}</div>
+        <div class="oge-backup-listening-options">${parsed.options.map(([n,v]) => `<div><b>${escapeHtml(n)})</b> ${escapeHtml(v)}</div>`).join('')}</div></div>
+      </article>`);
+    }
+    return cards.join('');
+  }
+
+  function listeningTask5Model(fullText, blocks) {
+    const block = blocks.find(item => item.number === 5);
+    if (!block) return null;
+    let body = block.body;
+    const nextIntro = body.search(/(?:Вы помогаете|Прослушайте аудиозапись интервью)/iu);
+    if (nextIntro >= 0) body = backupTextClean(body.slice(0, nextIntro));
+    const numbered = [...body.matchAll(/(?:^|\n)\s*([1-6])\.\s*(?:\n\s*)?([^\n]+)/g)];
+    const rubrics = numbered.map(match => [Number(match[1]), backupInstructionClean(match[2])]).filter(([,v]) => v);
+    const firstRubric = numbered.length ? numbered[0].index : -1;
+    const gridMarker = body.search(/(?:^|\n)Запишите\s+в\s+таблицу/iu);
+    const instructionEnd = firstRubric >= 0 ? firstRubric : (gridMarker >= 0 ? gridMarker : body.length);
+    const instruction = backupInstructionClean(body.slice(0, instructionEnd));
+    if (rubrics.length < 4) return null;
+    const html = `<div><ol class="oge-backup-rubric-list">${rubrics.map(([,v]) => `<li>${escapeHtml(v)}</li>`).join('')}</ol>
+      <table class="oge-backup-table oge-backup-answer-grid"><thead><tr><th>Говорящий</th>${['A','B','C','D','E'].map(x => `<th>${x}</th>`).join('')}</tr></thead>
+      <tbody><tr><td>Рубрика</td>${['A','B','C','D','E'].map(() => '<td class="oge-backup-blank-cell"></td>').join('')}</tr></tbody></table></div>`;
+    return { instruction, html };
+  }
+
+  function listeningShortAnswerModel(fullText, blocks, currentNo) {
+    const rows = blocks.filter(block => block.number >= 6).map(block => {
+      const prompt = backupInstructionClean(block.body.replace(/_+/g, ' '));
+      return { number: block.number, prompt };
+    }).filter(row => row.prompt);
+    if (!rows.length) return null;
+    const firstTask = blocks.find(block => block.number === 6);
+    const task5 = blocks.find(block => block.number === 5);
+    let intro = '';
+    if (task5 && firstTask) {
+      const tail = task5.body;
+      const idx = tail.search(/(?:Вы помогаете|Прослушайте аудиозапись интервью)/iu);
+      if (idx >= 0) intro = backupInstructionClean(tail.slice(idx));
+    }
+    if (!intro) {
+      const marker = fullText.search(/(?:Вы помогаете своему другу|Прослушайте аудиозапись интервью)/iu);
+      if (marker >= 0) {
+        const cut = fullText.search(/(?:^|\n)Задание\s*№\s*6\./imu);
+        intro = backupInstructionClean(fullText.slice(marker, cut > marker ? cut : fullText.length));
+      }
+    }
+    const minNo = Math.min(...rows.map(r => r.number));
+    const maxNo = Math.max(...rows.map(r => r.number));
+    const html = `<table class="oge-backup-table oge-backup-short-answer"><tbody>${rows.map(row => `<tr${row.number === currentNo ? ' class="is-current"' : ''}><td>${row.number}</td><td>${escapeHtml(row.prompt)}</td><td></td></tr>`).join('')}</tbody></table>`;
+    return { instruction: intro, html, minNo, maxNo };
+  }
+
+  function cleanReadingMatchingText(value) {
+    let text = normalizeNumberedLines(value);
+    const marker = /Запишите\s+в\s+таблицу\s+выбранные\s+цифры\s+под\s+соответствующими\s+буквами\./iu;
+    const match = marker.exec(text);
+    if (match) text = backupTextClean(text.slice(0, match.index + match[0].length));
+    return text;
+  }
+
+  function readingMatchingQuestionsHtml(value) {
+    const text = normalizeNumberedLines(value);
+    const aIndex = text.search(/(?:^|\n)A[.)]\s+/imu);
+    const questionPart = aIndex >= 0 ? text.slice(0, aIndex) : text;
+    const rows = [...questionPart.matchAll(/(?:^|\n)\s*([1-7])[.)]\s+([^\n]+)/g)]
+      .map(match => [Number(match[1]), backupInstructionClean(match[2])])
+      .filter(([,q]) => q && q.length > 8);
+    if (rows.length < 4) return '';
+    return `<table class="oge-backup-table"><tbody>${rows.map(([n,q]) => `<tr><td class="oge-backup-exam-number">${n}</td><td>${escapeHtml(q)}</td><td class="oge-backup-blank-cell"></td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function splitWritingTask(value) {
+    const text = backupTextClean(value);
+    const letterStart = text.search(/You have received an email message from/iu);
+    if (letterStart < 0) return null;
+    const writeStart = text.slice(letterStart).search(/(?:^|\n)Write a message to /imu);
+    const absoluteWrite = writeStart >= 0 ? letterStart + writeStart : -1;
+    const before = backupTextClean(text.slice(0, letterStart));
+    const letter = backupTextClean(text.slice(letterStart, absoluteWrite >= 0 ? absoluteWrite : text.length));
+    const after = absoluteWrite >= 0 ? backupTextClean(text.slice(absoluteWrite)) : '';
+    return { instruction: backupTextClean([before, after].filter(Boolean).join('\n\n')), letter };
+  }
+
+  function splitSpeakingTask1(value) {
+    const text = backupTextClean(value);
+    const match = text.match(/^(Task\s*1\..*?not\s+have\s+more\s+than\s+2\s+minutes\s+for\s+reading\s+aloud\.)\s*/isu);
+    if (!match) return null;
+    return {
+      instruction: backupInstructionClean(match[1]),
+      passage: backupTextClean(text.slice(match[0].length))
+    };
+  }
+
+  function stripReadingTailCoveredByTable(bodyText, prompt) {
+    let body = backupTextClean(bodyText);
+    const p = backupTextClean(prompt);
+    if (!body || !p) return body;
+
+    let idx = body.indexOf(p);
+    if (idx < 0) {
+      const flatBody = body.replace(/\s+/g, ' ');
+      const flatPrompt = p.replace(/\s+/g, ' ');
+      const flatIdx = flatBody.indexOf(flatPrompt);
+      if (flatIdx < 0) return body;
+      // Do not cut on an approximate index because whitespace collapsing changes
+      // offsets. Exact match is the safe path; otherwise keep the body intact.
+      return body;
+    }
+
+    let cut = idx;
+    const before = body.slice(0, idx);
+    const taskMatches = [...before.matchAll(/(?:^|\n)Задание\s*№\s*\d+[^\n]*$/gimu)];
+    if (taskMatches.length) {
+      const last = taskMatches[taskMatches.length - 1];
+      if (idx - last.index < 260) cut = last.index;
+    }
+    return backupTextClean(body.slice(0, cut));
+  }
+
+  function compactTableHtml(tables, bodyText) {
+    const rows = backupTableRows(tables);
+    if (!rows.length) return '';
+    const bodyNorm = backupTextCmp(bodyText);
+    const filtered = [];
+
+    for (const cells of rows) {
+      const key = cells.join(' | ');
+      const norm = backupTextCmp(key);
+      if (norm.length > 1200) continue;
+      if (norm.length > 80 && bodyNorm.includes(norm)) continue;
+      filtered.push(cells);
+    }
+
+    if (!filtered.length || filtered.length > 36) return '';
+    return `<table class="oge-backup-table"><tbody>${filtered.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+
+  function prepareBackupViewerContent(x) {
+    let condition = backupTextClean(x.condition_text);
+    let conditionTitle = 'Условие';
+    const kes = String(x.kes || '').trim();
+    const groupItems = Array.isArray(x.group_items) ? x.group_items : [];
+    const groupCount = groupItems.length || Number(x.group_count || 0);
+    const sections = [];
+    let showAnswerArea = false;
+    let answerTitle = 'Ваш ответ';
+
+    let text = [x.text, x.item_extra]
+      .map(backupTextClean)
+      .filter(Boolean)
+      .filter((value, index, arr) => !arr.some((other, otherIndex) => otherIndex < index && backupTextCmp(other).includes(backupTextCmp(value))))
+      .join('\n\n');
+
+    const speakingTask = Number((text.match(/^Task\s*([123])\./iu) || [])[1] || 0);
+    const isListening = /^1\.2\./.test(kes);
+    const isReadingMatching = /^1\.3\.1(?:\.|$)/.test(kes);
+    const isReadingGroup = /^1\.3\.2(?:\.|$)/.test(kes);
+    const isReading = /^1\.3\./.test(kes);
+    const isGrammarLexis = /^2\./.test(kes) && speakingTask === 0;
+    const isWriting = /^1\.4\.3(?:\.|$)/.test(kes);
+
+    const range = detectBackupExamRange([condition, text].filter(Boolean).join('\n'), groupCount);
+    let tableHtml = '';
+    let tableTitle = 'Варианты / таблица';
+
+    if (isListening) {
+      const fullText = backupTextClean([x.condition_text, x.text].filter(Boolean).join('\n'));
+      const blocks = parseTaskBlocks(fullText);
+      const currentNo = backupGroupPosition(x);
+      if (currentNo >= 1 && currentNo <= 4) {
+        const first = blocks.find(block => block.number === 1);
+        condition = backupInstructionClean(first ? fullText.slice(0, first.markerIndex) : x.condition_text);
+        tableHtml = listeningChoiceGroupHtml(blocks, currentNo);
+        tableTitle = 'Задания 1–4';
+        text = '';
+      } else if (currentNo === 5 || /^1\.2\.1(?:\.|$)/.test(kes)) {
+        const model = listeningTask5Model(fullText, blocks);
+        if (model) {
+          condition = model.instruction;
+          tableHtml = model.html;
+          tableTitle = 'Рубрики и таблица ответа';
+          text = '';
+        }
+      } else if (currentNo >= 6) {
+        const model = listeningShortAnswerModel(fullText, blocks, currentNo);
+        if (model) {
+          condition = model.instruction || 'Прослушайте аудиозапись и впишите ответы.';
+          tableHtml = model.html;
+          tableTitle = `Задания ${model.minNo}–${model.maxNo}`;
+          text = '';
+        }
+      }
+      if (text) {
+        condition = backupInstructionClean(condition);
+        tableHtml = compactTableHtml(x.tables, text);
+      }
+    } else if (isGrammarLexis) {
+      const taskMarker = text.search(/(?:^|\n)Задание\s*№\s*\d+/iu);
+      if (taskMarker > 0) {
+        const instructionTail = backupInstructionClean(text.slice(0, taskMarker));
+        if (instructionTail && instructionTail.length < 1500 && !backupTextCmp(condition).includes(backupTextCmp(instructionTail))) {
+          condition = backupInstructionClean(`${condition} ${instructionTail}`);
+        } else condition = backupInstructionClean(condition);
+      } else condition = backupInstructionClean(condition);
+      tableHtml = grammarTableHtml(x.tables, range) || compactTableHtml(x.tables, '');
+      if (tableHtml) {
+        text = '';
+        if (range) tableTitle = `Задания ${range.start}–${range.end}`;
+      }
+    } else if (isReadingGroup && groupItems.length > 1) {
+      const split = splitReadingGroupBody(text, condition);
+      condition = split.condition;
+      text = split.passage;
+      tableHtml = readingGroupHtml(groupItems, range, x.fipi_id);
+      if (tableHtml) tableTitle = range ? `Задания ${range.start}–${range.end}` : 'Задания группы';
+      else {
+        const choice = choiceTableModel(x.tables);
+        if (choice) {
+          text = stripReadingTailCoveredByTable(text, choice.prompt);
+          tableHtml = choice.html;
+        } else tableHtml = compactTableHtml(x.tables, text);
+      }
+    } else if (isReadingMatching) {
+      condition = backupInstructionClean(condition);
+      text = cleanReadingMatchingText(text);
+      tableHtml = readingMatchingQuestionsHtml(text) || compactTableHtml(x.tables, text);
+      tableTitle = 'Вопросы / таблица';
+    } else if (isReading) {
+      condition = backupInstructionClean(condition);
+      const choice = choiceTableModel(x.tables);
+      if (choice) {
+        text = stripReadingTailCoveredByTable(text, choice.prompt);
+        tableHtml = choice.html;
+      } else tableHtml = compactTableHtml(x.tables, text);
+    } else if (isWriting) {
+      const writing = splitWritingTask(text);
+      if (writing) {
+        conditionTitle = 'Инструкция';
+        condition = writing.instruction || backupTextClean(condition);
+        sections.push({ title: 'Письмо', text: writing.letter, className: 'oge-backup-letter' });
+        text = '';
+        tableHtml = '';
+        showAnswerArea = true;
+        answerTitle = 'Ваш ответ (100–120 слов)';
+      } else {
+        condition = backupInstructionClean(condition);
+        tableHtml = compactTableHtml(x.tables, text);
+      }
+    } else {
+      if (speakingTask === 1) {
+        const speaking = splitSpeakingTask1(text);
+        if (speaking) {
+          conditionTitle = 'Инструкция';
+          condition = speaking.instruction;
+          sections.push({ title: 'Текст для чтения', text: speaking.passage });
+          text = '';
+          tableHtml = '';
+        }
+      } else if (speakingTask === 3) {
+        condition = backupInstructionClean(condition);
+        tableHtml = '';
+      } else {
+        condition = backupInstructionClean(condition);
+        tableHtml = compactTableHtml(x.tables, text);
+      }
+    }
+
+    return {
+      condition,
+      conditionTitle,
+      text: backupTextClean(text),
+      tableHtml,
+      tableTitle,
+      range,
+      sections,
+      showAnswerArea,
+      answerTitle
+    };
+  }
+
+  async function currentAccessToken() {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    const token = data?.session?.access_token || '';
+    if (!token) throw new Error('Нет активной email-сессии Supabase.');
+    return token;
+  }
+
+  async function currentBackupAccess() {
+    if (appMode === 'donut') {
+      const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
+      if (!token) throw new Error('Сессия VK Donut завершена. Войдите через VK снова.');
+      return { kind: 'donut', token };
+    }
+    return { kind: 'email', token: await currentAccessToken() };
+  }
+
+  function backupGatewayHeaders(access) {
+    if (typeof access === 'string') return { Authorization: `Bearer ${access}` };
+    if (access?.kind === 'donut') return { 'X-OGE-Donut-Session': access.token };
+    if (access?.token) return { Authorization: `Bearer ${access.token}` };
+    return {};
+  }
+
+  async function fetchBackupItemPayload(fipiId, access) {
+    if (access?.kind === 'donut') {
+      const response = await fetch(`${BACKUP_GATEWAY_URL}?fipi_id=${encodeURIComponent(fipiId)}`, {
+        headers: backupGatewayHeaders(access)
+      });
+      const raw = await response.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch {}
+      if (!response.ok || !data) throw new Error(`${response.status} ${data?.error || raw || 'Backup item unavailable'}`);
+      return data;
+    }
+
+    const { data, error } = await supabaseClient.rpc('oge_backup_get_item_v3', { p_fipi_id: fipiId });
+    if (error) throw error;
+    return data || {};
+  }
+
+  async function fetchBackupMediaBlob(mediaId, access) {
+    const response = await fetch(`${BACKUP_GATEWAY_URL}?media_id=${encodeURIComponent(mediaId)}`, {
+      headers: backupGatewayHeaders(access)
+    });
+    if (!response.ok) throw new Error(`media ${mediaId}: HTTP ${response.status}`);
+    return response.blob();
+  }
+
+  async function renderBackupMedia(container, media, token) {
+    const images = (media || []).filter(m => m.kind === 'image');
+    const audio = (media || []).filter(m => m.kind === 'audio');
+    const other = (media || []).filter(m => !['image','audio'].includes(m.kind));
+
+    if (images.length) {
+      const section = document.createElement('section');
+      section.className = 'oge-backup-section';
+      section.innerHTML = '<h4>Картинка</h4><div class="oge-backup-media"></div>';
+      container.appendChild(section);
+      const box = section.querySelector('.oge-backup-media');
+      for (const m of images) {
+        try {
+          const blob = await fetchBackupMediaBlob(m.media_id, token);
+          const url = URL.createObjectURL(blob); backupObjectUrls.push(url);
+          const img = document.createElement('img'); img.src = url; img.alt = `Изображение задания ${m.media_id}`; box.appendChild(img);
+        } catch (error) { box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть изображение: ${escapeHtml(error?.message || error)}</div>`); }
+      }
+    }
+
+    if (audio.length) {
+      const section = document.createElement('section');
+      section.className = 'oge-backup-section';
+      section.innerHTML = '<h4>▶ Аудио</h4><div class="oge-backup-media"></div>';
+      container.appendChild(section);
+      const box = section.querySelector('.oge-backup-media');
+      for (const m of audio) {
+        try {
+          const blob = await fetchBackupMediaBlob(m.media_id, token);
+          const url = URL.createObjectURL(blob); backupObjectUrls.push(url);
+          const player = document.createElement('audio'); player.controls = true; player.preload = 'metadata'; player.src = url; box.appendChild(player);
+        } catch (error) { box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть аудио: ${escapeHtml(error?.message || error)}</div>`); }
+      }
+    }
+
+    if (other.length) {
+      container.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Дополнительных media: ${other.length}</div>`);
+    }
+  }
+
+  async function openBackupTask(fipiId) {
+    ensureBackupViewerUi();
+    const dialog = document.querySelector('#ogeBackupViewer');
+    const body = document.querySelector('#ogeBackupViewerBody');
+    revokeBackupObjectUrls();
+    body.innerHTML = '<div class="oge-backup-loading">Открываю Яндекс-резерв…</div>';
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+
+    try {
+      const token = await currentBackupAccess();
+      const x = await fetchBackupItemPayload(fipiId, token);
+      body.innerHTML = `
+        <span class="oge-backup-kicker">OGE · ЯНДЕКС-РЕЗЕРВ</span>
+        <h2 class="oge-backup-title">Задание ${escapeHtml(x.fipi_id || fipiId)}</h2>
+        <div class="oge-backup-meta">
+          <span class="oge-backup-chip">КЭС ${escapeHtml(x.kes || '—')}</span>
+          ${x.answer_type ? `<span class="oge-backup-chip">${escapeHtml(x.answer_type)}</span>` : ''}
+          <span class="oge-backup-chip">data v${escapeHtml(x.clean_version || backupRuntime?.backup_version || '0.2')}</span>
+          <span class="oge-backup-chip">viewer v${BACKUP_VIEWER_RENDER_VERSION}</span>
+        </div>`;
+
+      const prepared = prepareBackupViewerContent(x);
+      if (prepared.condition) {
+        body.insertAdjacentHTML('beforeend', `<section class="oge-backup-section"><h4>${escapeHtml(prepared.conditionTitle || 'Условие')}</h4><div class="oge-backup-text">${escapeHtml(prepared.condition)}</div></section>`);
+      }
+
+      // Core order stays: instruction/condition -> image -> audio -> task content.
+      await renderBackupMedia(body, x.media || [], token);
+
+      for (const section of prepared.sections || []) {
+        const cls = section.className ? ` ${escapeAttr(section.className)}` : '';
+        const inner = section.html || `<div class="oge-backup-text${cls}">${escapeHtml(section.text || '')}</div>`;
+        body.insertAdjacentHTML('beforeend', `<section class="oge-backup-section"><h4>${escapeHtml(section.title || 'Материал')}</h4>${inner}</section>`);
+      }
+
+      if (prepared.text) {
+        body.insertAdjacentHTML('beforeend', `<section class="oge-backup-section"><h4>Текст</h4><div class="oge-backup-text">${escapeHtml(prepared.text)}</div></section>`);
+      }
+
+      if (prepared.tableHtml) {
+        body.insertAdjacentHTML('beforeend', `<section class="oge-backup-section"><h4>${escapeHtml(prepared.tableTitle || 'Варианты / таблица')}</h4>${prepared.tableHtml}</section>`);
+      }
+
+      if (prepared.showAnswerArea) {
+        body.insertAdjacentHTML('beforeend', `<section class="oge-backup-section"><h4>${escapeHtml(prepared.answerTitle || 'Ваш ответ')}</h4><p class="oge-backup-answer-hint">Поле можно заполнить на экране или оставить пустым для распечатки.</p><div class="oge-backup-answer-area" contenteditable="true" spellcheck="true" data-placeholder="Напишите ответ здесь…"></div></section>`);
+      }
+
+      body.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Резервная копия открытого банка ФИПИ · ${escapeHtml(x.parse_status || '')}${x.official_fipi_url ? ' · оригинал ФИПИ сохранён в карточке' : ''}</div>`);
+    } catch (error) {
+      console.error('OGE backup viewer failed:', error);
+      body.innerHTML = `<div class="oge-backup-loading">Не удалось открыть резерв: ${escapeHtml(error?.message || error)}</div>`;
+    }
   }
 
   function taskCard(task) {
@@ -506,7 +1352,7 @@
             title="Статус: ${escapeAttr(statusLabel(status))}. Нажмите, чтобы переключить.">
             ${status === 'used' ? '★ Использовано' : status === 'viewed' ? '◉ Просмотрено' : '○ Новое'}
           </button>
-          <span class="oge-open-hint">ОТКРЫТЬ ↗</span>
+          <span class="oge-open-hint">${backupIsActiveForCards() ? 'ОТКРЫТЬ · ЯНДЕКС' : 'ОТКРЫТЬ ↗'}</span>
         </div>
       </article>`;
   }
@@ -532,7 +1378,7 @@
     if (status !== 'all') parts.push(statusLabel(status));
     if (search) parts.push(`«${search}»`);
 
-    el.selectionTitle.textContent = parts.join(' · ');
+    if (el.selectionTitle) el.selectionTitle.textContent = parts.join(' · ');
     if (el.sectionMeta) {
       el.sectionMeta.textContent = `${visibleTasks.length} карточек · ${visibleBuckets().length} ${visibleBuckets().length === 1 ? 'раздел' : 'разделов'}`;
     }
@@ -594,6 +1440,11 @@
 
     document.querySelectorAll('[data-open-task]').forEach(card => {
       const openTask = () => {
+        const taskId = card.dataset.openTask;
+        if (backupIsActiveForCards() && taskId) {
+          void openBackupTask(taskId);
+          return;
+        }
         const url = card.dataset.taskUrl;
         if (url) window.open(url, '_blank', 'noopener,noreferrer');
       };
@@ -1128,6 +1979,7 @@
     records = normalizeRecords(safeParse(localStorage.getItem(`${DONUT_STORAGE_PREFIX}status:${donutUserId}`), {}));
     setTasks(cards, new Map());
     enterApp('donut');
+    await refreshBackupRuntime();
   }
 
   async function processDonutCallback() {
@@ -1174,8 +2026,21 @@
     const key = `oge-navigator-access-session:${currentUser.id}`;
     let sessionId = sessionStorage.getItem(key);
     if (!sessionId) { sessionId = crypto.randomUUID(); sessionStorage.setItem(key, sessionId); }
-    const { error } = await supabaseClient.rpc('record_navigator_access', { p_session_id: sessionId, p_access_level: accessLevel });
-    if (error) console.error('Access event save failed:', error);
+
+    const payload = {
+      p_session_id: sessionId,
+      p_access_level: accessLevel,
+      p_platform: currentPlatform()
+    };
+    const v2 = await supabaseClient.rpc('record_navigator_access_v096', payload);
+    if (!v2.error) return;
+
+    // Safe fallback while the SQL migration has not yet been installed.
+    const legacy = await supabaseClient.rpc('record_navigator_access', {
+      p_session_id: sessionId,
+      p_access_level: accessLevel
+    });
+    if (legacy.error) console.error('Access event save failed:', legacy.error);
   }
 
   async function activateAuthenticatedSession(user) {
@@ -1231,6 +2096,9 @@
         console.warn(`Protected catalog returned ${cards.length} cards; expected 1735.`);
       }
       setTasks(cards, overrides);
+      // Load backup runtime without changing source. Cold login already has a boot
+      // screen; resume logic never rebuilds the workspace, preserving no-flicker.
+      await refreshBackupRuntime();
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
       await recordEmailAccess(profile.role === 'admin' ? 'admin' : 'full');
       await loadCloudStatuses();
@@ -1276,25 +2144,42 @@
   }
 
   async function fetchAdminDonutSessions() {
-    const { data } = await supabaseClient.auth.getSession();
-    const token = data?.session?.access_token || '';
-    if (!token) return [];
+    const { data, error } = await supabaseClient.rpc('admin_donut_directory_v096');
+    if (!error) return Array.isArray(data) ? data : [];
+
+    // Backward-compatible fallback for GitHub before the v0.9.6 SQL is installed.
+    const session = await supabaseClient.auth.getSession();
+    const token = session.data?.session?.access_token || '';
+    if (!token) throw error;
     const result = await callDonutFunction({ action: 'admin_sessions' }, token);
     return Array.isArray(result.sessions) ? result.sessions : [];
   }
 
   async function revokeDonutSession(vkUserId) {
     if (!window.confirm(`Завершить активную Donut-сессию VK ID ${vkUserId}?`)) return;
-    const { data } = await supabaseClient.auth.getSession();
-    await callDonutFunction({ action: 'admin_revoke', vk_user_id: Number(vkUserId) }, data?.session?.access_token || '');
+
+    const rpc = await supabaseClient.rpc('admin_revoke_donut_sessions_v096', {
+      p_vk_user_id: Number(vkUserId)
+    });
+    if (rpc.error) {
+      const { data } = await supabaseClient.auth.getSession();
+      await callDonutFunction({ action: 'admin_revoke', vk_user_id: Number(vkUserId) }, data?.session?.access_token || '');
+    }
     await refreshAdminPanel();
   }
 
   async function setDonutBlocked(vkUserId, blocked) {
     const label = blocked ? 'Заблокировать' : 'Разблокировать';
     if (!window.confirm(`${label} VK ID ${vkUserId}?`)) return;
-    const { data } = await supabaseClient.auth.getSession();
-    await callDonutFunction({ action: 'admin_set_blocked', vk_user_id: Number(vkUserId), blocked }, data?.session?.access_token || '');
+
+    const rpc = await supabaseClient.rpc('admin_set_donut_blocked_v096', {
+      p_vk_user_id: Number(vkUserId),
+      p_blocked: Boolean(blocked)
+    });
+    if (rpc.error) {
+      const { data } = await supabaseClient.auth.getSession();
+      await callDonutFunction({ action: 'admin_set_blocked', vk_user_id: Number(vkUserId), blocked }, data?.session?.access_token || '');
+    }
     await refreshAdminPanel();
   }
 
@@ -1316,20 +2201,92 @@
   }
 
   function renderStatsChart(rows = []) {
-    if (!rows.length) { el.statsChart.innerHTML = '<div class="admin-users-empty">Данных пока нет.</div>'; return; }
-    const w=760,h=210,px=34,py=24,max=Math.max(1,...rows.map(r=>Number(r.visits)||0));
-    const pts=rows.map((r,i)=>({x:px+(rows.length===1?0:i*(w-px*2)/(rows.length-1)),y:h-py-(Number(r.visits)||0)*(h-py*2)/max,v:Number(r.visits)||0,d:String(r.day)}));
-    el.statsChart.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img"><line x1="${px}" y1="${h-py}" x2="${w-px}" y2="${h-py}" class="stats-axis"/><polyline points="${pts.map(p=>`${p.x},${p.y}`).join(' ')}" class="stats-line"/>${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" class="stats-dot"><title>${escapeHtml(p.d)}: ${p.v}</title></circle>`).join('')}</svg>`;
+    if (!el.statsChart) return;
+    if (!rows.length) {
+      el.statsChart.innerHTML = '<div class="admin-users-empty">Данных пока нет.</div><div id="statsTooltip" class="stats-tooltip hidden" role="tooltip"></div>';
+      el.statsTooltip = document.querySelector('#statsTooltip');
+      return;
+    }
+
+    const w = 760, h = 112, px = 24, py = 16;
+    const max = Math.max(1, ...rows.map(r => Number(r.visits) || 0));
+    const pts = rows.map((r, i) => {
+      const rawDay = String(r.day || '');
+      const date = /^\d{4}-\d{2}-\d{2}/.test(rawDay)
+        ? new Date(`${rawDay.slice(0,10)}T00:00:00`)
+        : new Date(rawDay);
+      const label = Number.isNaN(date.getTime())
+        ? rawDay
+        : date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return {
+        x: px + (rows.length === 1 ? (w - px * 2) / 2 : i * (w - px * 2) / (rows.length - 1)),
+        y: h - py - (Number(r.visits) || 0) * (h - py * 2) / max,
+        v: Number(r.visits) || 0,
+        d: label
+      };
+    });
+
+    el.statsChart.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="График входов">
+        <line x1="${px}" y1="${h-py}" x2="${w-px}" y2="${h-py}" class="stats-axis"/>
+        <polyline points="${pts.map(p => `${p.x},${p.y}`).join(' ')}" class="stats-line"/>
+        ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" class="stats-dot" tabindex="0" data-date="${escapeAttr(p.d)}" data-visits="${p.v}"><title>${escapeHtml(p.d)} · ${p.v} входов</title></circle>`).join('')}
+      </svg>
+      <div id="statsTooltip" class="stats-tooltip hidden" role="tooltip"></div>`;
+
+    el.statsTooltip = document.querySelector('#statsTooltip');
+    const showTip = (event) => {
+      const dot = event.currentTarget;
+      if (!el.statsTooltip) return;
+      const chartRect = el.statsChart.getBoundingClientRect();
+      const dotRect = dot.getBoundingClientRect();
+      el.statsTooltip.innerHTML = `<strong>${escapeHtml(dot.dataset.date || '')}</strong><span>${escapeHtml(dot.dataset.visits || '0')} входов</span>`;
+      el.statsTooltip.style.left = `${dotRect.left - chartRect.left + dotRect.width / 2}px`;
+      el.statsTooltip.style.top = `${Math.max(2, dotRect.top - chartRect.top - 8)}px`;
+      el.statsTooltip.classList.remove('hidden');
+    };
+    const hideTip = () => el.statsTooltip?.classList.add('hidden');
+
+    el.statsChart.querySelectorAll('.stats-dot').forEach(dot => {
+      dot.addEventListener('mouseenter', showTip);
+      dot.addEventListener('focus', showTip);
+      dot.addEventListener('mouseleave', hideTip);
+      dot.addEventListener('blur', hideTip);
+    });
   }
 
   async function refreshStatistics() {
     if (appMode !== 'admin') return;
-    const {from,to}=statsRange();
-    el.statsPeriodLabel.textContent=`${from.toLocaleDateString('ru-RU')} — ${to.toLocaleDateString('ru-RU')}`;
-    const {data,error}=await supabaseClient.rpc('admin_navigator_stats',{p_from:from.toISOString(),p_to:to.toISOString()});
-    if(error) throw error; const s=data||{};
-    el.statsVisits.textContent=s.visits||0; el.statsUnique.textContent=s.unique_users||0; el.statsEmail.textContent=s.email_visits||0; el.statsDonut.textContent=s.donut_visits||0;
-    adminStatsUsers=new Map((s.users||[]).map(r=>[`${r.user_kind}:${r.user_key}`,r])); renderStatsChart(s.daily||[]);
+    const { from, to } = statsRange();
+    if (el.statsPeriodLabel) {
+      el.statsPeriodLabel.textContent = `${from.toLocaleDateString('ru-RU')} — ${to.toLocaleDateString('ru-RU')}`;
+    }
+
+    let { data, error } = await supabaseClient.rpc('admin_navigator_stats_v096', {
+      p_from: from.toISOString(),
+      p_to: to.toISOString()
+    });
+
+    if (error) {
+      const legacy = await supabaseClient.rpc('admin_navigator_stats', {
+        p_from: from.toISOString(),
+        p_to: to.toISOString()
+      });
+      data = legacy.data;
+      error = legacy.error;
+    }
+    if (error) throw error;
+
+    const s = data || {};
+    el.statsVisits.textContent = s.visits || 0;
+    el.statsUnique.textContent = s.unique_users || 0;
+    el.statsEmail.textContent = s.email_visits || 0;
+    el.statsDonut.textContent = s.donut_visits || 0;
+    if (el.statsGithub) el.statsGithub.textContent = s.github_visits || 0;
+    if (el.statsYandex) el.statsYandex.textContent = s.yandex_visits || 0;
+
+    adminStatsUsers = new Map((s.users || []).map(r => [`${r.user_kind}:${r.user_key}`, r]));
+    renderStatsChart(s.daily || []);
   }
 
   function renderAdminUsers() {
@@ -1339,9 +2296,9 @@
     const blocked = rows.filter(p => p.status === 'blocked').length;
     const activeDonuts = adminDonutSessions.filter(row => row.session_expires_at && !row.blocked).length;
 
-    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · VK Donut: ${adminDonutSessions.length}`;
+    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · VK Donut: ${adminDonutLoadError ? '—' : adminDonutSessions.length}`;
     if (el.adminParticipantsBadge) el.adminParticipantsBadge.textContent = String(rows.length);
-    if (el.adminDonutBadge) el.adminDonutBadge.textContent = String(adminDonutSessions.length);
+    if (el.adminDonutBadge) el.adminDonutBadge.textContent = adminDonutLoadError ? '!' : String(adminDonutSessions.length);
 
     el.adminUsersList.innerHTML = rows.length ? rows.map(profile => {
       const self = profile.id === currentUser?.id;
@@ -1369,7 +2326,9 @@
       const sessionText = sessionActive ? `до ${new Date(row.session_expires_at).toLocaleString('ru-RU')}` : 'нет активной сессии';
       const activity = adminStatsUsers.get(`donut:${row.vk_user_id}`);
       return `<article class="admin-user-card${sessionActive ? ' online-now' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(name)}</div><div class="admin-user-id">VK ID ${escapeHtml(row.vk_user_id)}</div><div class="admin-user-chips"><span class="admin-chip">VK DONUT</span><span class="admin-chip full">FULL</span><span class="admin-chip ${row.blocked ? 'blocked' : row.last_don_status ? 'active' : 'pending'}">${row.blocked ? 'BLOCKED' : row.last_don_status ? 'DONUT ACTIVE' : 'NOT ACTIVE'}</span>${sessionActive ? '<span class="admin-chip active">SESSION</span>' : ''}</div></div><div class="admin-user-info"><span>Впервые: <strong>${escapeHtml(firstSeen)}</strong></span><span>Проверка: <strong>${escapeHtml(verified)}</strong></span></div><div class="admin-user-info"><span>Сессия: <strong>${escapeHtml(sessionText)}</strong></span><span>Входов за период: <strong>${escapeHtml(activity?.login_count || 0)}</strong></span></div><div class="admin-user-actions">${sessionActive ? `<button class="admin-mini-button" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="admin-mini-button ${row.blocked ? 'success-soft' : 'danger-soft'}" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
-    }).join('') : '<div class="admin-users-empty">VK Donut-пользователей пока нет.</div>';
+    }).join('') : (adminDonutLoadError
+      ? `<div class="admin-users-empty error-text">VK Donut: ${escapeHtml(adminDonutLoadError)}</div>`
+      : '<div class="admin-users-empty">VK Donut-пользователей пока нет.</div>');
 
     el.adminUsersList.querySelectorAll('[data-user-edit]').forEach(button => button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEdit)));
     el.adminUsersList.querySelectorAll('[data-user-quick]').forEach(button => button.addEventListener('click', () => quickSetUserStatus(button.dataset.userQuick, button.dataset.nextStatus)));
@@ -1386,40 +2345,69 @@
   }
 
   function renderAdminDemoState() {
-    el.adminDemoState.textContent = demoEnabledState ? '● Включено' : '○ Выключено';
-    el.adminDemoState.className = demoEnabledState ? 'demo-state on' : 'demo-state off';
-    el.toggleDemoButton.textContent = demoEnabledState ? 'Выключить' : 'Включить';
+    if (el.adminDemoState) {
+      el.adminDemoState.textContent = demoEnabledState ? 'ON' : 'OFF';
+      el.adminDemoState.className = 'hidden';
+    }
+    if (el.toggleDemoButton) {
+      el.toggleDemoButton.textContent = demoEnabledState ? 'DEMO: ON' : 'DEMO: OFF';
+      el.toggleDemoButton.classList.toggle('active-state', demoEnabledState);
+    }
   }
 
   async function refreshAdminPanel() {
     if (appMode !== 'admin' || !currentUser) return;
+
     el.adminUserStats.textContent = 'Загрузка…';
     el.adminUsersList.innerHTML = '<div class="admin-users-empty">Загружаю пользователей…</div>';
     el.adminDonutList.innerHTML = '<div class="admin-users-empty">Загружаю VK Donut…</div>';
-    try {
-      const [profiles, enabled, donutSessions] = await Promise.all([
-        fetchAdminProfiles(),
-        fetchDemoEnabled(),
-        fetchAdminDonutSessions()
-      ]);
-      adminProfiles = profiles;
-      adminDonutSessions = donutSessions;
-      demoEnabledState = enabled;
-      renderAdminDemoState();
-      renderAdminUsers();
-    } catch (error) {
-      console.error('Admin panel refresh failed:', error);
-      el.adminUserStats.textContent = 'Не удалось загрузить данные';
-      const html = `<div class="admin-users-empty error-text">${escapeHtml(error?.message || error)}</div>`;
-      el.adminUsersList.innerHTML = html;
-      el.adminDonutList.innerHTML = html;
+    adminDonutLoadError = '';
+
+    const [profilesResult, demoResult, donutResult] = await Promise.allSettled([
+      fetchAdminProfiles(),
+      fetchDemoEnabled(),
+      fetchAdminDonutSessions()
+    ]);
+
+    if (profilesResult.status === 'fulfilled') {
+      adminProfiles = profilesResult.value;
+    } else {
+      console.error('Email participant load failed:', profilesResult.reason);
+      adminProfiles = [];
+      el.adminUsersList.innerHTML = `<div class="admin-users-empty error-text">Email: ${escapeHtml(profilesResult.reason?.message || profilesResult.reason || 'ошибка загрузки')}</div>`;
     }
+
+    if (demoResult.status === 'fulfilled') {
+      demoEnabledState = demoResult.value;
+    } else {
+      console.error('DEMO state load failed:', demoResult.reason);
+    }
+
+    if (donutResult.status === 'fulfilled') {
+      adminDonutSessions = donutResult.value;
+    } else {
+      console.error('Donut directory load failed:', donutResult.reason);
+      adminDonutSessions = [];
+      adminDonutLoadError = String(donutResult.reason?.message || donutResult.reason || 'ошибка загрузки');
+    }
+
+    renderAdminDemoState();
+    renderAdminUsers();
   }
 
   async function openAdminPanel() {
     if (appMode !== 'admin') return;
+    ensureBackupAdminControls();
     if (typeof el.adminAccessDialog.showModal === 'function') el.adminAccessDialog.showModal();
-    await Promise.all([refreshAdminPanel(), refreshStatistics()]);
+
+    await Promise.allSettled([
+      refreshBackupRuntime(),
+      refreshAdminPanel(),
+      refreshStatistics()
+    ]);
+
+    renderBackupAdminState();
+    renderAdminDemoState();
     renderAdminUsers();
   }
 
@@ -1630,6 +2618,7 @@
         }
         try {
           await validateCurrentDonutSessionSilently(token);
+          await refreshBackupRuntime();
         } catch (error) {
           if (Number(error?.status) === 401) {
             sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
@@ -1727,7 +2716,16 @@
     if (document.visibilityState === 'visible' && currentUser && isAuthenticatedWorkspaceMode()) {
       loadCloudStatuses();
     }
+    if (document.visibilityState === 'visible' && appMode === 'donut') {
+      void refreshBackupRuntime();
+    }
   }
+
+  window.setInterval(() => {
+    if (appMode === 'donut' && document.visibilityState === 'visible') {
+      void refreshBackupRuntime();
+    }
+  }, 60000);
 
   el.topic.addEventListener('change', () => { populateSubtopics(); render(); });
   el.subtopic.addEventListener('change', render);
@@ -1754,7 +2752,7 @@
     el.adminAccessDialog.close();
     startDemo();
   });
-  el.refreshAdminUsersButton.addEventListener('click', async () => { await Promise.all([refreshAdminPanel(), refreshStatistics()]); renderAdminUsers(); });
+  el.refreshAdminUsersButton.addEventListener('click', async () => { await Promise.allSettled([refreshAdminPanel(), refreshStatistics(), refreshBackupRuntime()]); renderBackupAdminState(); renderAdminDemoState(); renderAdminUsers(); });
   el.adminParticipantsTab?.addEventListener('click', () => setAdminTab('participants'));
   el.adminDonutTab?.addEventListener('click', () => setAdminTab('donut'));
   el.refreshStatsButton.addEventListener('click', async () => { await refreshStatistics(); renderAdminUsers(); });
@@ -1805,6 +2803,8 @@
     if (currentUser && isAuthenticatedWorkspaceMode()) loadCloudStatuses();
   });
 
+  ensureBackupViewerUi();
+  ensureBackupAdminControls();
   populateBuckets();
   setAdminTab('participants');
 

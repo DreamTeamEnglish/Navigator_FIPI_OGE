@@ -1,4 +1,4 @@
-// Navigator_FIPI_OGE v0.9.6.2 — DONUT BACKUP ACCESS · backup viewer v0.2.3 UNCHANGED
+// Navigator_FIPI_OGE v0.9.9Y3.1 HOTFIX — personal FIPI/Yandex source switch · known-good Yandex auth fixes preserved · viewer v0.2.3 unchanged
 (() => {
   'use strict';
 
@@ -22,10 +22,18 @@
   const BACKUP_GATEWAY_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-backup-gateway`;
   const BACKUP_PREVIEW_KEY = 'oge-backup-admin-preview-v020';
   const BACKUP_VIEWER_RENDER_VERSION = '0.2.3';
+  const SOURCE_PREF_PREFIX = 'oge-navigator-source-pref-v099y3:';
+  const MANUAL_ACCESS_FUNCTION_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-manual-access`;
+  const MANUAL_VK_EMAIL_DOMAIN = 'example.com';
+  const PRIMARY_NAVIGATOR_URL = 'https://navigator-fipi-oge-dreamteam.website.yandexcloud.net';
+  const RESUME_ACCESS_RECHECK_MS = 5 * 60 * 1000;
+  const RESUME_STATUS_RECHECK_MS = 30 * 1000;
 
   const el = {
     bootState: document.querySelector('#bootState'),
     bootMessage: document.querySelector('#bootMessage'),
+    bootDetail: document.querySelector('#bootDetail'),
+    bootSlowNote: document.querySelector('#bootSlowNote'),
     accessGate: document.querySelector('#accessGate'),
     appShell: document.querySelector('#appShell'),
     accessMessage: document.querySelector('#accessMessage'),
@@ -36,6 +44,7 @@
     signOutButton: document.querySelector('#signOutButton'),
     adminAccessButton: document.querySelector('#adminAccessButton'),
     cloudBadge: document.querySelector('#cloudBadge'),
+    sourceBadge: document.querySelector('#sourceBadge'),
     modeKicker: document.querySelector('#modeKicker'),
     brandLogo: document.querySelector('#brandLogo'),
     footerYear: document.querySelector('#footerYear'),
@@ -62,9 +71,34 @@
     authDialog: document.querySelector('#authDialog'),
     authHint: document.querySelector('#authHint'),
     authError: document.querySelector('#authError'),
-    email: document.querySelector('#emailInput'),
+    loginIdentifier: document.querySelector('#loginIdentifierInput'),
     password: document.querySelector('#passwordInput'),
     signIn: document.querySelector('#signInButton'),
+    forgotVkPasswordButton: document.querySelector('#forgotVkPasswordButton'),
+
+    firstPasswordDialog: document.querySelector('#firstPasswordDialog'),
+    firstPasswordInput: document.querySelector('#firstPasswordInput'),
+    firstPasswordRepeat: document.querySelector('#firstPasswordRepeat'),
+    firstPasswordError: document.querySelector('#firstPasswordError'),
+    saveFirstPasswordButton: document.querySelector('#saveFirstPasswordButton'),
+
+    recoveryDialog: document.querySelector('#recoveryDialog'),
+    closeRecoveryDialogButton: document.querySelector('#closeRecoveryDialogButton'),
+    recoveryVkIdInput: document.querySelector('#recoveryVkIdInput'),
+    recoveryCodeInput: document.querySelector('#recoveryCodeInput'),
+    recoveryPasswordInput: document.querySelector('#recoveryPasswordInput'),
+    recoveryPasswordRepeat: document.querySelector('#recoveryPasswordRepeat'),
+    recoveryError: document.querySelector('#recoveryError'),
+    recoverPasswordButton: document.querySelector('#recoverPasswordButton'),
+
+    recoveryCodeDialog: document.querySelector('#recoveryCodeDialog'),
+    recoveryCodeValue: document.querySelector('#recoveryCodeValue'),
+    copyRecoveryCodeButton: document.querySelector('#copyRecoveryCodeButton'),
+    confirmRecoveryCodeButton: document.querySelector('#confirmRecoveryCodeButton'),
+
+    accessEndedDialog: document.querySelector('#accessEndedDialog'),
+    accessEndedText: document.querySelector('#accessEndedText'),
+    closeAccessEndedButton: document.querySelector('#closeAccessEndedButton'),
 
     adminAccessDialog: document.querySelector('#adminAccessDialog'),
     closeAdminAccessDialogButton: document.querySelector('#closeAdminAccessDialogButton'),
@@ -80,6 +114,7 @@
     adminDonutPanel: document.querySelector('#adminDonutPanel'),
     adminParticipantsBadge: document.querySelector('#adminParticipantsBadge'),
     adminDonutBadge: document.querySelector('#adminDonutBadge'),
+    createManualVkButton: document.querySelector('#createManualVkButton'),
     refreshAdminUsersButton: document.querySelector('#refreshAdminUsersButton'),
     statsPeriodSelect: document.querySelector('#statsPeriodSelect'), statsFromDate: document.querySelector('#statsFromDate'), statsToDate: document.querySelector('#statsToDate'), refreshStatsButton: document.querySelector('#refreshStatsButton'), statsPeriodLabel: document.querySelector('#statsPeriodLabel'), statsVisits: document.querySelector('#statsVisits'), statsUnique: document.querySelector('#statsUnique'), statsEmail: document.querySelector('#statsEmail'), statsDonut: document.querySelector('#statsDonut'), statsGithub: document.querySelector('#statsGithub'), statsYandex: document.querySelector('#statsYandex'), statsChart: document.querySelector('#statsChart'), statsTooltip: document.querySelector('#statsTooltip'),
 
@@ -93,6 +128,31 @@
     customExpiryDate: document.querySelector('#customExpiryDate'),
     cancelUserAccessButton: document.querySelector('#cancelUserAccessButton'),
     saveUserAccessButton: document.querySelector('#saveUserAccessButton'),
+
+    manualVkAdminDialog: document.querySelector('#manualVkAdminDialog'),
+    closeManualVkAdminDialogButton: document.querySelector('#closeManualVkAdminDialogButton'),
+    manualVkAdminTitle: document.querySelector('#manualVkAdminTitle'),
+    manualVkNameInput: document.querySelector('#manualVkNameInput'),
+    manualVkIdInput: document.querySelector('#manualVkIdInput'),
+    manualVkSourceSelect: document.querySelector('#manualVkSourceSelect'),
+    manualVkAdminError: document.querySelector('#manualVkAdminError'),
+    createManualVkAccessButton: document.querySelector('#createManualVkAccessButton'),
+    adminCredentialsDialog: document.querySelector('#adminCredentialsDialog'),
+    adminCredentialsText: document.querySelector('#adminCredentialsText'),
+    copyAdminCredentialsButton: document.querySelector('#copyAdminCredentialsButton'),
+    closeAdminCredentialsButton: document.querySelector('#closeAdminCredentialsButton'),
+
+    createEmailAccessButton: document.querySelector('#createEmailAccessButton'),
+    emailAccessAdminDialog: document.querySelector('#emailAccessAdminDialog'),
+    closeEmailAccessAdminDialogButton: document.querySelector('#closeEmailAccessAdminDialogButton'),
+    emailAccessNameInput: document.querySelector('#emailAccessNameInput'),
+    emailAccessEmailInput: document.querySelector('#emailAccessEmailInput'),
+    emailAccessLevelSelect: document.querySelector('#emailAccessLevelSelect'),
+    emailAccessExpiryPresetSelect: document.querySelector('#emailAccessExpiryPresetSelect'),
+    emailAccessCustomExpiryLabel: document.querySelector('#emailAccessCustomExpiryLabel'),
+    emailAccessCustomExpiryDate: document.querySelector('#emailAccessCustomExpiryDate'),
+    emailAccessAdminError: document.querySelector('#emailAccessAdminError'),
+    createEmailAccessSubmitButton: document.querySelector('#createEmailAccessSubmitButton'),
 
     topicDialog: document.querySelector('#topicDialog'),
     topicEditorTaskId: document.querySelector('#topicEditorTaskId'),
@@ -127,12 +187,102 @@
   let initialBootPending = true;
   let resumeValidationInFlight = false;
   let resumeValidationTimer = null;
+  let lastResumeValidationAt = 0;
+  let lastVisibleStatusRefreshAt = 0;
+  let bootSlowTimer = null;
+  let authActivationPromise = null;
+  let authActivationUserId = '';
+  let pendingRecoveryContinuation = null;
+  let pendingRecoveredLogin = null;
+  let manualAdminPrefillVkId = '';
   let backupRuntime = { content_source: 'fipi', yandex_backup_ready: false, backup_version: '0.1.0' };
   let backupPreviewEnabled = sessionStorage.getItem(BACKUP_PREVIEW_KEY) === '1';
   let backupObjectUrls = [];
 
   function configuredKey() {
     return CONFIG.supabasePublishableKey || CONFIG.supabaseAnonKey || '';
+  }
+
+  function normalizeVkId(value) {
+    const raw = String(value ?? '').trim();
+    const number = Number(raw);
+    return /^\d{1,15}$/.test(raw) && Number.isSafeInteger(number) && number > 0 ? raw : '';
+  }
+
+  function manualVkEmail(vkId) {
+    return `navigator-vk-${vkId}@${MANUAL_VK_EMAIL_DOMAIN}`;
+  }
+
+  function resolveLoginIdentifier(value) {
+    const raw = String(value ?? '').trim();
+    const vkId = normalizeVkId(raw);
+    if (vkId) return { kind: 'vk', vkId, email: manualVkEmail(vkId) };
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return { kind: 'email', vkId: '', email: raw };
+    return null;
+  }
+
+  function updateRecoveryVisibility() {
+    const login = resolveLoginIdentifier(el.loginIdentifier?.value || '');
+    el.forgotVkPasswordButton?.classList.toggle('hidden', !login);
+  }
+
+  async function currentSupabaseAccessToken() {
+    if (!supabaseClient) return '';
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    return data?.session?.access_token || '';
+  }
+
+  async function callManualAccess(payload, token = '') {
+    const headers = { 'Content-Type': 'application/json', apikey: configuredKey() };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(MANUAL_ACCESS_FUNCTION_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    let data = {};
+    try { data = await response.json(); }
+    catch { data = {}; }
+    if (!response.ok || data?.ok === false) {
+      const error = new Error(data?.code || `HTTP ${response.status}`);
+      error.code = data?.code || '';
+      error.status = response.status;
+      error.retryAfterSeconds = Number(data?.retry_after_seconds || 0);
+      throw error;
+    }
+    return data;
+  }
+
+  function manualAccessErrorText(error) {
+    const code = String(error?.code || error?.message || '');
+    if (code === 'password_too_short') return 'Пароль должен содержать не менее 10 символов.';
+    if (code === 'password_too_long') return 'Пароль слишком длинный.';
+    if (code === 'invalid_vk_id') return 'Проверьте VK ID: нужны только цифры.';
+    if (code === 'vk_already_linked') return 'Для этого VK ID постоянный вход уже создан.';
+    if (code === 'invalid_email') return 'Проверьте email.';
+    if (code === 'email_already_linked') return 'Для этого email управляемый доступ уже создан.';
+    if (code === 'email_auth_exists') return 'Этот email уже существует в Supabase Auth. Новый аккаунт не создан, чтобы не перезаписать существующий доступ.';
+    if (code === 'invalid_recovery') return 'Email / VK ID или код восстановления не совпадают.';
+    if (code === 'recovery_locked') {
+      const mins = Math.max(1, Math.ceil(Number(error?.retryAfterSeconds || 900) / 60));
+      return `Слишком много попыток. Повторите примерно через ${mins} мин.`;
+    }
+    if (code === 'access_ended') return 'access_ended';
+    if (code === 'admin_only') return 'Действие доступно только администратору.';
+    return 'Не удалось выполнить действие. Попробуйте ещё раз чуть позже.';
+  }
+
+  function clearInlineError(node) {
+    if (!node) return;
+    node.textContent = '';
+    node.classList.add('hidden');
+  }
+
+  function showInlineError(node, message) {
+    if (!node) return;
+    node.textContent = message;
+    node.classList.remove('hidden');
   }
 
   function currentPlatform() {
@@ -464,19 +614,70 @@
     });
   }
 
-  function backupIsActiveForCards() {
-    if (!backupRuntime?.yandex_backup_ready) return false;
+  function isFullSourceWorkspace() {
+    if (appMode === 'donut') return Boolean(donutUserId);
+    return Boolean(currentUser && ['admin','teacher'].includes(appMode) && currentProfile?.access_level === 'full');
+  }
 
-    // Personal admin PREVIEW never affects anybody else.
-    if (appMode === 'admin' && currentUser && backupPreviewEnabled) return true;
+  function sourcePreferenceKey() {
+    if (appMode === 'donut' && donutUserId) return `${SOURCE_PREF_PREFIX}vk:${donutUserId}`;
+    if (currentUser?.id) return `${SOURCE_PREF_PREFIX}auth:${currentUser.id}`;
+    return '';
+  }
 
-    // Global source applies to every working FULL mode:
-    // approved email FULL and active VK Donut FULL.
-    if (appMode === 'donut') {
-      return backupRuntime.content_source === 'yandex_backup';
+  function personalSourcePreference() {
+    const key = sourcePreferenceKey();
+    if (!key) return '';
+    const value = localStorage.getItem(key) || '';
+    return ['fipi','yandex_backup'].includes(value) ? value : '';
+  }
+
+  function effectiveContentSource() {
+    if (!isFullSourceWorkspace()) return 'fipi';
+    if (!backupRuntime?.yandex_backup_ready) return 'fipi';
+    if (appMode === 'admin' && backupPreviewEnabled) return 'yandex_backup';
+    return personalSourcePreference() || backupRuntime.content_source || 'fipi';
+  }
+
+  function updateSourceBadge() {
+    if (!el.sourceBadge) return;
+    const visible = isFullSourceWorkspace();
+    el.sourceBadge.classList.toggle('hidden', !visible);
+    if (!visible) return;
+
+    const effective = effectiveContentSource();
+    const yandex = effective === 'yandex_backup';
+    el.sourceBadge.textContent = yandex ? 'Источник: ЯНДЕКС' : 'Источник: FIPI';
+    el.sourceBadge.disabled = !backupRuntime?.yandex_backup_ready && !yandex;
+    el.sourceBadge.classList.toggle('source-yandex', yandex);
+    el.sourceBadge.title = !backupRuntime?.yandex_backup_ready
+      ? 'Яндекс-резерв временно выключен администратором · используется ФИПИ'
+      : (yandex ? 'Нажмите, чтобы перейти на официальный ФИПИ' : 'Нажмите, чтобы открыть задания из Яндекс-резерва');
+  }
+
+  function setPersonalSourcePreference(source) {
+    if (!isFullSourceWorkspace() || !['fipi','yandex_backup'].includes(source)) return;
+    if (source === 'yandex_backup' && !backupRuntime?.yandex_backup_ready) {
+      showToast('Яндекс-резерв временно выключен администратором');
+      updateSourceBadge();
+      return;
     }
-    if (!currentUser || !['admin','teacher'].includes(appMode)) return false;
-    return backupRuntime.content_source === 'yandex_backup';
+    const key = sourcePreferenceKey();
+    if (!key) return;
+    localStorage.setItem(key, source);
+    updateSourceBadge();
+    render();
+    showToast(source === 'yandex_backup' ? '✓ Ваш источник: Яндекс-резерв' : '✓ Ваш источник: ФИПИ');
+  }
+
+  function togglePersonalSource() {
+    if (!isFullSourceWorkspace()) return;
+    const next = effectiveContentSource() === 'yandex_backup' ? 'fipi' : 'yandex_backup';
+    setPersonalSourcePreference(next);
+  }
+
+  function backupIsActiveForCards() {
+    return effectiveContentSource() === 'yandex_backup';
   }
 
   async function refreshBackupRuntime() {
@@ -507,6 +708,7 @@
     }
 
     renderBackupAdminState();
+    updateSourceBadge();
     return backupRuntime;
   }
 
@@ -576,6 +778,7 @@
   function ensureBackupAdminControls() {
     const preview = document.querySelector('#ogeBackupPreviewButton');
     const source = document.querySelector('#ogeBackupSourceButton');
+    const readyButton = document.querySelector('#ogeBackupReadyButton');
 
     if (preview && preview.dataset.bound !== '1') {
       preview.dataset.bound = '1';
@@ -585,6 +788,10 @@
       source.dataset.bound = '1';
       source.addEventListener('click', toggleBackupGlobalSource);
     }
+    if (readyButton && readyButton.dataset.bound !== '1') {
+      readyButton.dataset.bound = '1';
+      readyButton.addEventListener('click', toggleBackupReady);
+    }
     renderBackupAdminState();
   }
 
@@ -592,22 +799,28 @@
     const state = document.querySelector('#ogeBackupAdminState');
     const preview = document.querySelector('#ogeBackupPreviewButton');
     const source = document.querySelector('#ogeBackupSourceButton');
+    const readyButton = document.querySelector('#ogeBackupReadyButton');
     const ready = Boolean(backupRuntime?.yandex_backup_ready);
     const globalYandex = backupRuntime?.content_source === 'yandex_backup';
 
     if (state) {
-      state.textContent = `Резерв: ${ready ? 'READY' : 'не готов'} · data v${backupRuntime?.backup_version || '—'} · viewer v${BACKUP_VIEWER_RENDER_VERSION} · глобально: ${globalYandex ? 'Яндекс' : 'FIPI'}${backupPreviewEnabled ? ' · у вас PREVIEW' : ''}`;
+      state.textContent = `Резерв: ${ready ? 'READY' : 'OFF'} · data v${backupRuntime?.backup_version || '—'} · viewer v${BACKUP_VIEWER_RENDER_VERSION} · по умолчанию: ${globalYandex ? 'Яндекс' : 'FIPI'}${backupPreviewEnabled ? ' · у вас PREVIEW' : ''}`;
     }
     if (preview) {
       preview.disabled = !ready;
       preview.textContent = backupPreviewEnabled ? 'PREVIEW: ON' : 'PREVIEW: OFF';
       preview.classList.toggle('active-state', backupPreviewEnabled);
     }
+    if (readyButton) {
+      readyButton.textContent = ready ? 'Резерв: ON' : 'Резерв: OFF';
+      readyButton.classList.toggle('active-state', ready);
+    }
     if (source) {
       source.disabled = !ready;
-      source.textContent = globalYandex ? 'Источник: Яндекс' : 'Источник: FIPI';
+      source.textContent = globalYandex ? 'По умолчанию: Яндекс' : 'По умолчанию: FIPI';
       source.classList.toggle('active-state', globalYandex);
     }
+    updateSourceBadge();
   }
 
   async function toggleBackupPreview() {
@@ -624,8 +837,8 @@
     if (appMode !== 'admin' || !supabaseClient) return;
     const next = backupRuntime?.content_source === 'yandex_backup' ? 'fipi' : 'yandex_backup';
     const text = next === 'yandex_backup'
-      ? 'Переключить ВСЕХ FULL-пользователей (email + VK Donut) на Яндекс-резерв?'
-      : 'Вернуть ВСЕХ FULL-пользователей (email + VK Donut) на ФИПИ?';
+      ? 'Сделать Яндекс-резерв источником ПО УМОЛЧАНИЮ? Пользователи с личным выбором сохранят свой источник.'
+      : 'Сделать ФИПИ источником ПО УМОЛЧАНИЮ? Пользователи с личным выбором сохранят свой источник.';
     if (!window.confirm(text)) return;
     try {
       const { data, error } = await supabaseClient.rpc('oge_backup_admin_set_content_source', { p_source: next });
@@ -633,10 +846,35 @@
       backupRuntime.content_source = String(data || next);
       renderBackupAdminState();
       render();
-      showToast(next === 'yandex_backup' ? '✓ Все FULL-пользователи переключены на Яндекс-резерв' : '✓ Все FULL-пользователи возвращены на ФИПИ');
+      showToast(next === 'yandex_backup' ? '✓ По умолчанию: Яндекс-резерв' : '✓ По умолчанию: ФИПИ');
     } catch (error) {
       console.error('Backup source switch failed:', error);
-      alert(`Не удалось переключить источник: ${error?.message || error}`);
+      alert(`Не удалось изменить источник по умолчанию: ${error?.message || error}`);
+    }
+  }
+
+  async function toggleBackupReady() {
+    if (appMode !== 'admin' || !supabaseClient) return;
+    const next = !Boolean(backupRuntime?.yandex_backup_ready);
+    const text = next
+      ? 'Включить Яндекс-резерв для FULL-пользователей?'
+      : 'Выключить Яндекс-резерв? Все FULL-пользователи сразу будут открывать ФИПИ.';
+    if (!window.confirm(text)) return;
+    try {
+      const { data, error } = await supabaseClient.rpc('oge_backup_admin_set_backup_ready_v099y3', { p_ready: next });
+      if (error) throw error;
+      backupRuntime.yandex_backup_ready = Boolean(data);
+      if (!backupRuntime.yandex_backup_ready) backupRuntime.content_source = 'fipi';
+      if (!backupRuntime.yandex_backup_ready && backupPreviewEnabled) {
+        backupPreviewEnabled = false;
+        sessionStorage.removeItem(BACKUP_PREVIEW_KEY);
+      }
+      renderBackupAdminState();
+      render();
+      showToast(next ? '✓ Яндекс-резерв доступен учителям' : '✓ Резерв выключен · используется ФИПИ');
+    } catch (error) {
+      console.error('Backup ready switch failed:', error);
+      alert(`Не удалось изменить доступность резерва: ${error?.message || error}`);
     }
   }
 
@@ -1177,6 +1415,8 @@
   }
 
   async function fetchBackupItemPayload(fipiId, access) {
+    // VK Donut does not have a Supabase Auth JWT, so its protected backup item
+    // is resolved server-side by oge-backup-gateway using X-OGE-Donut-Session.
     if (access?.kind === 'donut') {
       const response = await fetch(`${BACKUP_GATEWAY_URL}?fipi_id=${encodeURIComponent(fipiId)}`, {
         headers: backupGatewayHeaders(access)
@@ -1188,6 +1428,8 @@
       return data;
     }
 
+    // ADMIN / email FULL keep the proven enriched RPC path. It returns the
+    // complete structured OGE card (KES, text, variants/tables, media metadata).
     const { data, error } = await supabaseClient.rpc('oge_backup_get_item_v3', { p_fipi_id: fipiId });
     if (error) throw error;
     return data || {};
@@ -1567,17 +1809,28 @@
     }
   }
 
+  async function fetchCatalogPage(pageIndex) {
+    const from = pageIndex * CATALOG_PAGE_SIZE;
+    const to = from + CATALOG_PAGE_SIZE - 1;
+    const { data, error } = await supabaseClient
+      .from('navigator_tasks')
+      .select('card')
+      .order('fipi_id', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    return data || [];
+  }
+
   async function fetchFullCatalog() {
-    const cards = [];
-    for (let from = 0; ; from += CATALOG_PAGE_SIZE) {
-      const to = from + CATALOG_PAGE_SIZE - 1;
-      const { data, error } = await supabaseClient
-        .from('navigator_tasks')
-        .select('card')
-        .order('fipi_id', { ascending: true })
-        .range(from, to);
-      if (error) throw error;
-      const page = data || [];
+    // The OGE bank currently fits into two 1000-row pages. Fetch the first two
+    // pages concurrently so cold start does not wait for two serial round trips.
+    const firstPages = await Promise.all([fetchCatalogPage(0), fetchCatalogPage(1)]);
+    const cards = firstPages.flatMap(page => page.map(row => row.card).filter(Boolean));
+    if (firstPages[1].length < CATALOG_PAGE_SIZE) return cards;
+
+    // Generic continuation if the bank grows beyond 2000 rows later.
+    for (let pageIndex = 2; ; pageIndex += 1) {
+      const page = await fetchCatalogPage(pageIndex);
       cards.push(...page.map(row => row.card).filter(Boolean));
       if (page.length < CATALOG_PAGE_SIZE) break;
     }
@@ -1784,14 +2037,73 @@
     }
   }
 
+  function mergeAccessIdentity(profile, manual, emailAccess) {
+    if (!profile) return profile;
+    const m = manual || null;
+    const e = emailAccess || null;
+    return {
+      ...profile,
+      login_kind: m ? 'vk_manual' : (e ? 'email_managed' : 'email'),
+      vk_user_id: m?.vk_user_id ?? null,
+      display_name: m?.display_name ?? e?.display_name ?? null,
+      must_change_password: Boolean(m?.must_change_password ?? e?.must_change_password),
+      manual_access_source: m?.access_source ?? null,
+      manual_access_created_at: m?.created_at ?? null,
+      email_access_created_at: e?.created_at ?? null
+    };
+  }
+
   async function fetchProfile(userId) {
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
-      .eq('id', userId)
-      .single();
-    if (error) throw error;
-    return data;
+    const [profileResult, manualResult, emailResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
+        .eq('id', userId)
+        .single(),
+      supabaseClient.rpc('oge_my_manual_vk_access_v097y'),
+      supabaseClient.rpc('oge_my_email_access_v099y')
+    ]);
+    if (profileResult.error) throw profileResult.error;
+    if (manualResult.error) throw manualResult.error;
+    if (emailResult.error) throw emailResult.error;
+    const manual = Array.isArray(manualResult.data) ? (manualResult.data[0] || null) : (manualResult.data || null);
+    const emailAccess = Array.isArray(emailResult.data) ? (emailResult.data[0] || null) : (emailResult.data || null);
+    return mergeAccessIdentity(profileResult.data, manual, emailAccess);
+  }
+
+  function showForcedPasswordDialog() {
+    stopBootSlowTimer();
+    appMode = 'password_change';
+    document.body.classList.remove('oge-workspace-mode');
+    el.bootState?.classList.add('hidden');
+    el.accessGate?.classList.add('hidden');
+    el.appShell?.classList.add('hidden');
+    el.headerLoginButton?.classList.add('hidden');
+    el.signOutButton?.classList.add('hidden');
+    el.adminAccessButton?.classList.add('hidden');
+    clearInlineError(el.firstPasswordError);
+    el.firstPasswordInput.value = '';
+    el.firstPasswordRepeat.value = '';
+    if (typeof el.firstPasswordDialog?.showModal === 'function' && !el.firstPasswordDialog.open) {
+      el.firstPasswordDialog.showModal();
+    }
+    window.setTimeout(() => el.firstPasswordInput?.focus(), 40);
+  }
+
+  function showAccessEnded(message = 'Срок доступа к Navigator закончился.') {
+    const hadUser = Boolean(currentUser);
+    showGate('blocked');
+    if (el.accessEndedText) el.accessEndedText.textContent = message;
+    if (typeof el.accessEndedDialog?.showModal === 'function' && !el.accessEndedDialog.open) {
+      el.accessEndedDialog.showModal();
+    }
+    if (hadUser && supabaseClient) {
+      void supabaseClient.auth.signOut({ scope: 'local' }).catch(error => console.warn('Local sign-out after access end failed:', error));
+    }
+    currentUser = null;
+    currentProfile = null;
+    el.headerLoginButton?.classList.remove('hidden');
+    el.signOutButton?.classList.add('hidden');
   }
 
   function setSecureBadge() {
@@ -1802,6 +2114,7 @@
   }
 
   function enterApp(mode) {
+    stopBootSlowTimer();
     appMode = mode;
     document.body.classList.add('oge-workspace-mode');
     if (el.bootState) el.bootState.classList.add('hidden');
@@ -1829,10 +2142,17 @@
       el.signOutButton.textContent = 'Выйти';
       setSecureBadge();
     }
+    updateSourceBadge();
     render();
   }
 
+  function stopBootSlowTimer() {
+    if (bootSlowTimer) window.clearTimeout(bootSlowTimer);
+    bootSlowTimer = null;
+  }
+
   function showGate(mode = 'gate', message = '', kind = 'info') {
+    stopBootSlowTimer();
     appMode = mode;
     document.body.classList.remove('oge-workspace-mode');
     if (el.bootState) el.bootState.classList.add('hidden');
@@ -1847,13 +2167,15 @@
     el.headerLoginButton.classList.toggle('hidden', Boolean(currentUser));
     el.signOutButton.classList.toggle('hidden', !currentUser);
     el.adminAccessButton.classList.add('hidden');
+    el.sourceBadge?.classList.add('hidden');
     el.signOutButton.textContent = 'Выйти';
     setBadge('protected', 'PROTECTED', 'Каталог защищён Supabase Auth + RLS');
     if (message) showAccessMessage(message, kind);
     else clearAccessMessage();
   }
 
-  function showBoot(message = 'Загружаю Navigator…') {
+  function showBoot(message = 'Открываю Navigator…', detail = 'Восстанавливаю сохранённый вход') {
+    stopBootSlowTimer();
     appMode = 'boot';
     document.body.classList.remove('oge-workspace-mode');
     el.appShell.classList.add('hidden');
@@ -1862,8 +2184,14 @@
     el.signOutButton.classList.add('hidden');
     el.adminAccessButton.classList.add('hidden');
     if (el.bootMessage) el.bootMessage.textContent = message;
+    if (el.bootDetail) el.bootDetail.textContent = detail;
+    if (el.bootSlowNote) el.bootSlowNote.textContent = 'Повторный вход обычно не требуется';
     if (el.bootState) el.bootState.classList.remove('hidden');
     clearAccessMessage();
+    bootSlowTimer = window.setTimeout(() => {
+      if (appMode !== 'boot') return;
+      if (el.bootSlowNote) el.bootSlowNote.textContent = 'Связь с защищённым каталогом занимает больше обычного — Navigator продолжает загрузку';
+    }, 3500);
   }
 
   async function startDemo() {
@@ -2044,9 +2372,25 @@
   }
 
   async function activateAuthenticatedSession(user) {
+    if (!user?.id) return;
+    if (authActivationPromise && authActivationUserId === user.id) return authActivationPromise;
+
+    authActivationUserId = user.id;
+    authActivationPromise = activateAuthenticatedSessionCore(user);
+    try {
+      return await authActivationPromise;
+    } finally {
+      if (authActivationUserId === user.id) {
+        authActivationPromise = null;
+        authActivationUserId = '';
+      }
+    }
+  }
+
+  async function activateAuthenticatedSessionCore(user) {
     currentUser = user;
     currentProfile = null;
-    showBoot('Проверяю доступ…');
+    showBoot('Проверяю доступ…', 'Сессия найдена · подтверждаю права');
 
     try {
       const profile = await fetchProfile(user.id);
@@ -2057,57 +2401,67 @@
         return;
       }
       if (profile.status === 'blocked') {
-        showGate('blocked', 'Доступ к Navigator приостановлен.', 'error');
+        showAccessEnded('Ваш доступ к Navigator завершён.');
         return;
       }
       if (profile.status !== 'active' || !['admin', 'teacher'].includes(profile.role)) {
-        showGate('blocked', 'Для этого аккаунта нет активного доступа к каталогу.', 'error');
+        showAccessEnded('Для этого аккаунта нет активного доступа к Navigator.');
         return;
       }
       if (isProfileExpired(profile)) {
-        showGate('blocked', 'Срок доступа завершён. Обратитесь к администратору.', 'warning');
+        showAccessEnded('Срок доступа к Navigator закончился.');
+        return;
+      }
+
+      if (['vk_manual', 'email_managed'].includes(profile.login_kind) && profile.must_change_password) {
+        showForcedPasswordDialog();
         return;
       }
 
       records = loadCloudCache(user.id);
 
       if (profile.role === 'teacher' && profile.access_level === 'demo') {
+        showBoot('Открываю DEMO…', 'Доступ подтверждён · загружаю подборку');
         const { data, error } = await supabaseClient.rpc('get_demo_tasks');
         if (error) throw error;
         const cards = (data || []).map(row => row.card).filter(Boolean);
         if (!cards.length) throw new Error('Персональная DEMO-подборка недоступна.');
         setTasks(cards, new Map());
         enterApp('demo_user');
-        await recordEmailAccess('demo');
-        await loadCloudStatuses();
+        void recordEmailAccess('demo');
+        void loadCloudStatuses();
         return;
       }
 
       if (profile.access_level !== 'full') {
-        showGate('blocked', 'Для этого аккаунта нет полного доступа к каталогу.', 'error');
+        showAccessEnded('Для этого аккаунта нет полного доступа к каталогу.');
         return;
       }
 
+      showBoot('Загружаю защищённый каталог…', 'Доступ подтверждён · 1735 заданий');
       const [cards, overrides] = await Promise.all([
         fetchFullCatalog(),
-        fetchTopicOverrides()
+        fetchTopicOverrides(),
+        refreshBackupRuntime()
       ]);
       if (cards.length !== 1735) {
         console.warn(`Protected catalog returned ${cards.length} cards; expected 1735.`);
       }
       setTasks(cards, overrides);
-      // Load backup runtime without changing source. Cold login already has a boot
-      // screen; resume logic never rebuilds the workspace, preserving no-flicker.
-      await refreshBackupRuntime();
       enterApp(profile.role === 'admin' ? 'admin' : 'teacher');
-      await recordEmailAccess(profile.role === 'admin' ? 'admin' : 'full');
-      await loadCloudStatuses();
+
+      // Statistics and personal task statuses are non-critical background work.
+      // Backup source was already fetched in parallel with the catalog above,
+      // so the very first card click respects the global FIPI/Yandex switch.
+      void recordEmailAccess(profile.role === 'admin' ? 'admin' : 'full');
+      void loadCloudStatuses();
+      lastResumeValidationAt = Date.now();
+      lastVisibleStatusRefreshAt = Date.now();
     } catch (error) {
       console.error('Access activation failed:', error);
       showGate('blocked', 'Не удалось проверить доступ к защищённому каталогу. Попробуйте позже.', 'error');
     }
   }
-
 
   function formatAccessExpiry(value) {
     if (!value) return 'бессрочно';
@@ -2135,12 +2489,26 @@
   }
 
   async function fetchAdminProfiles() {
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    const [profilesResult, manualResult, emailResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
+        .order('created_at', { ascending: true }),
+      supabaseClient.rpc('oge_admin_manual_vk_directory_v097y'),
+      supabaseClient.rpc('oge_admin_email_directory_v099y')
+    ]);
+    if (profilesResult.error) throw profilesResult.error;
+    if (manualResult.error) throw manualResult.error;
+    if (emailResult.error) throw emailResult.error;
+    const manualRows = Array.isArray(manualResult.data) ? manualResult.data : [];
+    const emailRows = Array.isArray(emailResult.data) ? emailResult.data : [];
+    const manualByUser = new Map(manualRows.map(row => [String(row.auth_user_id), row]));
+    const emailByUser = new Map(emailRows.map(row => [String(row.auth_user_id), row]));
+    return (profilesResult.data || []).map(profile => mergeAccessIdentity(
+      profile,
+      manualByUser.get(String(profile.id)) || null,
+      emailByUser.get(String(profile.id)) || null
+    ));
   }
 
   async function fetchAdminDonutSessions() {
@@ -2289,18 +2657,71 @@
     renderStatsChart(s.daily || []);
   }
 
+  function profileDisplayLabel(profile) {
+    if (profile?.login_kind === 'vk_manual') {
+      return profile.display_name || (profile.vk_user_id ? `VK ID ${profile.vk_user_id}` : 'VK-доступ');
+    }
+    if (profile?.login_kind === 'email_managed') return profile.display_name || profile.email || 'Email-доступ';
+    return profile?.email || profile?.id || 'Пользователь';
+  }
+
+  function isDonutManualProfile(profile) {
+    return Boolean(profile && profile.login_kind === 'vk_manual' && profile.manual_access_source === 'donut');
+  }
+
+  function linkedManualProfile(vkUserId) {
+    const key = String(vkUserId ?? '');
+    return adminProfiles.find(profile => profile.login_kind === 'vk_manual' && String(profile.vk_user_id ?? '') === key) || null;
+  }
+
+  function buildAdminDonutDirectory() {
+    const manualByVk = new Map();
+    adminProfiles.forEach(profile => {
+      if (!isDonutManualProfile(profile) || !profile.vk_user_id) return;
+      manualByVk.set(String(profile.vk_user_id), profile);
+    });
+
+    const byVk = new Map();
+    adminDonutSessions.forEach(row => {
+      const key = String(row?.vk_user_id ?? '');
+      if (!key) return;
+      byVk.set(key, {
+        vk_user_id: key,
+        legacy: row,
+        manual: manualByVk.get(key) || null
+      });
+    });
+
+    // A Yandex Donut login may exist even if this VK ID never created a legacy
+    // GitHub Donut session (for example, an administrator created it manually).
+    // Keep that person on the Donut tab anyway; VK ID is the single merge key.
+    manualByVk.forEach((profile, key) => {
+      if (byVk.has(key)) return;
+      byVk.set(key, {
+        vk_user_id: key,
+        legacy: null,
+        manual: profile
+      });
+    });
+
+    return Array.from(byVk.values());
+  }
+
   function renderAdminUsers() {
     const rows = adminProfiles;
-    const active = rows.filter(p => p.status === 'active' && !isProfileExpired(p)).length;
-    const pending = rows.filter(p => p.status === 'pending').length;
-    const blocked = rows.filter(p => p.status === 'blocked').length;
-    const activeDonuts = adminDonutSessions.filter(row => row.session_expires_at && !row.blocked).length;
+    const participantRows = rows.filter(profile => profile.role === 'admin' || !isDonutManualProfile(profile));
+    const emailRows = participantRows.filter(profile => profile.login_kind !== 'vk_manual');
+    const inviteVkRows = participantRows.filter(profile => profile.login_kind === 'vk_manual');
+    const active = participantRows.filter(profile => profile.status === 'active' && !isProfileExpired(profile)).length;
+    const pending = participantRows.filter(profile => profile.status === 'pending').length;
+    const blocked = participantRows.filter(profile => profile.status === 'blocked').length;
+    const donorDirectory = buildAdminDonutDirectory();
 
-    el.adminUserStats.textContent = `Email: ${rows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked} · VK Donut: ${adminDonutLoadError ? '—' : adminDonutSessions.length}`;
-    if (el.adminParticipantsBadge) el.adminParticipantsBadge.textContent = String(rows.length);
-    if (el.adminDonutBadge) el.adminDonutBadge.textContent = adminDonutLoadError ? '!' : String(adminDonutSessions.length);
+    el.adminUserStats.textContent = `Участники: ${participantRows.length} · Email: ${emailRows.length} · VK invite: ${inviteVkRows.length} · Active: ${active} · Pending: ${pending} · Blocked: ${blocked}`;
+    if (el.adminParticipantsBadge) el.adminParticipantsBadge.textContent = String(participantRows.length);
+    if (el.adminDonutBadge) el.adminDonutBadge.textContent = adminDonutLoadError ? '!' : String(donorDirectory.length);
 
-    el.adminUsersList.innerHTML = rows.length ? rows.map(profile => {
+    el.adminUsersList.innerHTML = participantRows.length ? participantRows.map(profile => {
       const self = profile.id === currentUser?.id;
       const activity = adminStatsUsers.get(`email:${profile.id}`);
       const expired = isProfileExpired(profile);
@@ -2309,32 +2730,65 @@
       const joined = profile.created_at ? new Date(profile.created_at).toLocaleDateString('ru-RU') : '—';
       const expiry = formatAccessExpiry(profile.access_expires_at);
       const visits = activity?.login_count || 0;
+      const manual = profile.login_kind === 'vk_manual';
+      const managedEmail = profile.login_kind === 'email_managed';
+      const label = profileDisplayLabel(profile);
+      const source = profile.role === 'admin' ? 'admin' : manual ? 'VK · invite' : managedEmail ? 'email · invite' : 'invite';
       let actions = '<span class="admin-self-note">Ваш аккаунт</span>';
       if (!self) {
         const nextStatus = profile.status === 'blocked' ? 'active' : 'blocked';
-        actions = `<button class="admin-mini-button" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button><button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
+        actions = `<button class="admin-mini-button" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button>${manual ? `<button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : managedEmail ? `<button class="admin-mini-button" type="button" data-email-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : ''}<button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
       }
-      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(profile.email || profile.id)}</div><div class="admin-user-chips"><span class="admin-chip">EMAIL</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${profile.role === 'admin' ? 'admin' : 'invite'}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
-    }).join('') : '<div class="admin-users-empty">Email-пользователей пока нет.</div>';
+      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(label)}</div>${manual ? `<div class="admin-user-id">VK ID ${escapeHtml(profile.vk_user_id || '—')}</div>` : managedEmail && profile.display_name ? `<div class="admin-user-id">${escapeHtml(profile.email || '—')}</div>` : ''}<div class="admin-user-chips"><span class="admin-chip${manual ? ' vk-manual' : ''}">${manual ? 'VK ID' : 'EMAIL'}</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${escapeHtml(source)}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
+    }).join('') : '<div class="admin-users-empty">Пользователей пока нет.</div>';
 
-    const donuts = adminDonutSessions;
-    el.adminDonutList.innerHTML = donuts.length ? donuts.map(row => {
-      const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || `VK ID ${row.vk_user_id}`;
-      const firstSeen = row.first_seen_at ? new Date(row.first_seen_at).toLocaleString('ru-RU') : '—';
-      const verified = row.last_verified_at ? new Date(row.last_verified_at).toLocaleString('ru-RU') : '—';
-      const sessionActive = Boolean(row.session_expires_at) && new Date(row.session_expires_at).getTime() > Date.now();
+    const connected = donorDirectory.filter(item => Boolean(item.manual)).length;
+    const waiting = donorDirectory.filter(item => Boolean(item.legacy) && !item.manual).length;
+    const migrationSummary = `<div class="admin-user-stats admin-user-stats-top">Доны: ${donorDirectory.length} · Яндекс подключён: ${connected} · Нужно перенести: ${waiting}</div>`;
+
+    el.adminDonutList.innerHTML = donorDirectory.length ? migrationSummary + donorDirectory.map(item => {
+      const row = item.legacy;
+      const manual = item.manual;
+      const vkId = item.vk_user_id;
+      const legacyName = row ? [row.first_name, row.last_name].filter(Boolean).join(' ') : '';
+      const name = manual?.display_name || legacyName || `VK ID ${vkId}`;
+      const firstSeen = row?.first_seen_at
+        ? new Date(row.first_seen_at).toLocaleString('ru-RU')
+        : (manual?.created_at ? new Date(manual.created_at).toLocaleString('ru-RU') : '—');
+      const verified = row?.last_verified_at ? new Date(row.last_verified_at).toLocaleString('ru-RU') : '—';
+      const sessionActive = Boolean(row?.session_expires_at) && new Date(row.session_expires_at).getTime() > Date.now();
       const sessionText = sessionActive ? `до ${new Date(row.session_expires_at).toLocaleString('ru-RU')}` : 'нет активной сессии';
-      const activity = adminStatsUsers.get(`donut:${row.vk_user_id}`);
-      return `<article class="admin-user-card${sessionActive ? ' online-now' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(name)}</div><div class="admin-user-id">VK ID ${escapeHtml(row.vk_user_id)}</div><div class="admin-user-chips"><span class="admin-chip">VK DONUT</span><span class="admin-chip full">FULL</span><span class="admin-chip ${row.blocked ? 'blocked' : row.last_don_status ? 'active' : 'pending'}">${row.blocked ? 'BLOCKED' : row.last_don_status ? 'DONUT ACTIVE' : 'NOT ACTIVE'}</span>${sessionActive ? '<span class="admin-chip active">SESSION</span>' : ''}</div></div><div class="admin-user-info"><span>Впервые: <strong>${escapeHtml(firstSeen)}</strong></span><span>Проверка: <strong>${escapeHtml(verified)}</strong></span></div><div class="admin-user-info"><span>Сессия: <strong>${escapeHtml(sessionText)}</strong></span><span>Входов за период: <strong>${escapeHtml(activity?.login_count || 0)}</strong></span></div><div class="admin-user-actions">${sessionActive ? `<button class="admin-mini-button" type="button" data-donut-revoke="${escapeAttr(row.vk_user_id)}">Завершить сессию</button>` : ''}<button class="admin-mini-button ${row.blocked ? 'success-soft' : 'danger-soft'}" type="button" data-donut-block="${escapeAttr(row.vk_user_id)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button></div></article>`;
+      const legacyActivity = adminStatsUsers.get(`donut:${vkId}`);
+      const yandexActivity = manual ? adminStatsUsers.get(`email:${manual.id}`) : null;
+      const legacyVisits = legacyActivity?.login_count || 0;
+      const yandexVisits = yandexActivity?.login_count || 0;
+      const manualStatus = manual ? (isProfileExpired(manual) ? 'EXPIRED' : statusDisplay(manual.status)) : 'NOT CONNECTED';
+      const manualStatusClass = !manual ? 'pending' : (isProfileExpired(manual) ? 'blocked' : (manual.status || 'pending'));
+      const legacyStatusText = !row ? 'NO LEGACY' : row.blocked ? 'BLOCKED' : row.last_don_status ? 'DONUT ACTIVE' : 'NOT ACTIVE';
+      const legacyStatusClass = !row ? 'pending' : row.blocked ? 'blocked' : row.last_don_status ? 'active' : 'pending';
+
+      const manualActions = manual
+        ? `<button class="admin-mini-button" type="button" data-user-edit-linked="${escapeAttr(manual.id)}">Управление доступом</button><button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(manual.id)}">Сбросить пароль</button>`
+        : `<button class="admin-mini-button success-soft" type="button" data-manual-create-vk="${escapeAttr(vkId)}" data-manual-create-name="${escapeAttr(name)}">Создать вход на Яндекс</button>`;
+      const legacyBlock = row && !manual
+        ? `<button class="admin-mini-button ${row.blocked ? 'success-soft' : 'danger-soft'}" type="button" data-donut-block="${escapeAttr(vkId)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button>`
+        : '';
+
+      return `<article class="admin-user-card${sessionActive ? ' online-now' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(name)}</div><div class="admin-user-id">VK ID ${escapeHtml(vkId)}</div><div class="admin-user-chips"><span class="admin-chip">VK DONUT</span><span class="admin-chip full">FULL</span><span class="admin-chip ${legacyStatusClass}">${escapeHtml(legacyStatusText)}</span><span class="admin-chip ${manualStatusClass}">YANDEX ${escapeHtml(manualStatus)}</span>${manual?.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${sessionActive ? '<span class="admin-chip active">SESSION</span>' : ''}</div></div><div class="admin-user-info"><span>GitHub/Donut: <strong>${row ? escapeHtml(legacyStatusText) : 'нет старой записи'}</strong></span><span>Яндекс: <strong>${manual ? escapeHtml(manualStatus) : 'не подключён'}</strong></span></div><div class="admin-user-info"><span>Входов GitHub/Donut: <strong>${escapeHtml(legacyVisits)}</strong></span><span>Входов Яндекс: <strong>${escapeHtml(yandexVisits)}</strong></span></div><div class="admin-user-info"><span>Впервые: <strong>${escapeHtml(firstSeen)}</strong></span>${row ? `<span>Проверка Donut: <strong>${escapeHtml(verified)}</strong></span>` : '<span>Проверка Donut: <strong>—</strong></span>'}</div>${row ? `<div class="admin-user-info"><span>Сессия GitHub: <strong>${escapeHtml(sessionText)}</strong></span></div>` : ''}<div class="admin-user-actions">${sessionActive ? `<button class="admin-mini-button" type="button" data-donut-revoke="${escapeAttr(vkId)}">Завершить сессию</button>` : ''}${manualActions}${legacyBlock}</div></article>`;
     }).join('') : (adminDonutLoadError
       ? `<div class="admin-users-empty error-text">VK Donut: ${escapeHtml(adminDonutLoadError)}</div>`
-      : '<div class="admin-users-empty">VK Donut-пользователей пока нет.</div>');
+      : '<div class="admin-users-empty">VK Donut-пользователей пока нет. Для нового пользователя нажмите «+ VK-доступ».</div>');
 
     el.adminUsersList.querySelectorAll('[data-user-edit]').forEach(button => button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEdit)));
     el.adminUsersList.querySelectorAll('[data-user-quick]').forEach(button => button.addEventListener('click', () => quickSetUserStatus(button.dataset.userQuick, button.dataset.nextStatus)));
+    document.querySelectorAll('[data-user-edit-linked]').forEach(button => button.addEventListener('click', () => openUserAccessEditor(button.dataset.userEditLinked)));
+    document.querySelectorAll('[data-manual-reset]').forEach(button => button.addEventListener('click', () => resetManualVkPassword(button.dataset.manualReset)));
+    document.querySelectorAll('[data-email-reset]').forEach(button => button.addEventListener('click', () => resetManagedEmailPassword(button.dataset.emailReset)));
+    el.adminDonutList.querySelectorAll('[data-manual-create-vk]').forEach(button => button.addEventListener('click', () => openManualVkAdminDialog(button.dataset.manualCreateVk, button.dataset.manualCreateName, 'donut')));
     el.adminDonutList.querySelectorAll('[data-donut-revoke]').forEach(button => button.addEventListener('click', () => revokeDonutSession(button.dataset.donutRevoke)));
     el.adminDonutList.querySelectorAll('[data-donut-block]').forEach(button => button.addEventListener('click', () => setDonutBlocked(button.dataset.donutBlock, button.dataset.blocked === 'true')));
   }
+
 
   function setAdminTab(tab = 'participants') {
     const donut = tab === 'donut';
@@ -2443,7 +2897,9 @@
     if (!profile || profile.id === currentUser?.id) return;
 
     editingAccessUserId = userId;
-    el.userAccessEmail.textContent = profile.email || userId;
+    el.userAccessEmail.textContent = profile.login_kind === 'vk_manual'
+      ? `${profileDisplayLabel(profile)} · VK ID ${profile.vk_user_id || '—'}`
+      : (profile.email || userId);
     el.userStatusSelect.value = profile.status || 'pending';
     el.userAccessLevelSelect.value = profile.access_level === 'demo' ? 'demo' : 'full';
 
@@ -2487,6 +2943,21 @@
     return Array.isArray(data) ? data[0] : data;
   }
 
+  async function syncLegacyDonutBlockIfLinked(profile, status) {
+    if (profile?.login_kind !== 'vk_manual' || !profile.vk_user_id) return;
+    const legacy = adminDonutSessions.find(row => String(row.vk_user_id) === String(profile.vk_user_id));
+    if (!legacy) return;
+    try {
+      const { error } = await supabaseClient.rpc('admin_set_donut_blocked_v096', {
+        p_vk_user_id: Number(profile.vk_user_id),
+        p_blocked: status === 'blocked'
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.warn('Legacy Donut block sync deferred:', error);
+    }
+  }
+
   async function saveUserAccess() {
     if (appMode !== 'admin' || !editingAccessUserId) return;
     const profile = adminProfiles.find(p => p.id === editingAccessUserId);
@@ -2501,6 +2972,7 @@
         el.userAccessLevelSelect.value,
         expiry
       );
+      await syncLegacyDonutBlockIfLinked(profile, el.userStatusSelect.value);
       el.userAccessDialog.close();
       editingAccessUserId = null;
       await refreshAdminPanel();
@@ -2519,12 +2991,13 @@
     if (!profile || profile.id === currentUser?.id) return;
 
     const label = nextStatus === 'blocked' ? 'заблокировать' : 'разрешить доступ для';
-    if (!window.confirm(`${label} ${profile.email || 'этого пользователя'}?`)) return;
+    if (!window.confirm(`${label} ${profileDisplayLabel(profile)}?`)) return;
 
     try {
       let expiry = profile.access_expires_at || null;
       if (nextStatus === 'active' && expiry && new Date(expiry).getTime() <= Date.now()) expiry = null;
       await callAdminSetUserAccess(profile, nextStatus, profile.access_level || 'full', expiry);
+      await syncLegacyDonutBlockIfLinked(profile, nextStatus);
       await refreshAdminPanel();
       showToast(nextStatus === 'blocked' ? '✓ Пользователь заблокирован' : '✓ Доступ активирован');
     } catch (error) {
@@ -2533,28 +3006,340 @@
     }
   }
 
+  function openManualVkAdminDialog(vkId = '', displayName = '', source = 'donut') {
+    if (appMode !== 'admin') return;
+    manualAdminPrefillVkId = normalizeVkId(vkId);
+    const migratingLegacyDonut = Boolean(manualAdminPrefillVkId && source !== 'invite');
+    el.manualVkNameInput.value = String(displayName || '');
+    el.manualVkIdInput.value = manualAdminPrefillVkId;
+    el.manualVkSourceSelect.value = source === 'invite' ? 'invite' : 'donut';
+    el.manualVkIdInput.disabled = Boolean(manualAdminPrefillVkId);
+    el.manualVkSourceSelect.disabled = migratingLegacyDonut;
+    el.manualVkAdminTitle.textContent = migratingLegacyDonut ? 'Создать вход на Яндекс для Donut' : 'Создать постоянный VK-вход';
+    el.createManualVkAccessButton.textContent = migratingLegacyDonut ? 'Создать вход на Яндекс' : 'Создать доступ';
+    clearInlineError(el.manualVkAdminError);
+    if (typeof el.manualVkAdminDialog?.showModal === 'function' && !el.manualVkAdminDialog.open) el.manualVkAdminDialog.showModal();
+    window.setTimeout(() => (el.manualVkNameInput.value ? el.createManualVkAccessButton : el.manualVkNameInput)?.focus(), 40);
+  }
+
+  function credentialsMessage(result, reset = false) {
+    const name = String(result.display_name || '').trim();
+    const isEmail = result.login_kind === 'email_managed' || Boolean(result.email && !result.vk_user_id);
+    return [
+      name ? `Здравствуйте, ${name}!` : 'Здравствуйте!',
+      '',
+      reset ? 'Для вас создан новый временный пароль к OGE Lexical Navigator.' : 'Ваш постоянный доступ к OGE Lexical Navigator готов.',
+      '',
+      isEmail ? `Email: ${result.email}` : `VK ID: ${result.vk_user_id}`,
+      `Временный пароль: ${result.temporary_password}`,
+      '',
+      `Открыть Navigator: ${PRIMARY_NAVIGATOR_URL}`,
+      '',
+      'Введите эти данные в обычной форме входа. При первом входе Navigator попросит придумать свой пароль и покажет код восстановления. Сохраните этот код.'
+    ].join('\n');
+  }
+
+  function showAdminCredentials(result, reset = false) {
+    el.adminCredentialsText.textContent = credentialsMessage(result, reset);
+    if (typeof el.adminCredentialsDialog?.showModal === 'function' && !el.adminCredentialsDialog.open) el.adminCredentialsDialog.showModal();
+  }
+
+  function normalizeEmail(value) {
+    const email = String(value ?? '').trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 320 ? email : '';
+  }
+
+  function openEmailAccessAdminDialog() {
+    if (appMode !== 'admin') return;
+    el.emailAccessNameInput.value = '';
+    el.emailAccessEmailInput.value = '';
+    el.emailAccessLevelSelect.value = 'full';
+    el.emailAccessExpiryPresetSelect.value = 'none';
+    el.emailAccessCustomExpiryDate.value = '';
+    el.emailAccessCustomExpiryLabel.classList.add('hidden');
+    clearInlineError(el.emailAccessAdminError);
+    if (typeof el.emailAccessAdminDialog?.showModal === 'function' && !el.emailAccessAdminDialog.open) el.emailAccessAdminDialog.showModal();
+    window.setTimeout(() => el.emailAccessNameInput?.focus(), 40);
+  }
+
+  function resolveEmailAccessExpiry() {
+    const preset = el.emailAccessExpiryPresetSelect.value;
+    if (preset === 'none') return null;
+    if (preset === 'custom') {
+      const day = el.emailAccessCustomExpiryDate.value;
+      if (!day) throw new Error('Выберите дату окончания доступа.');
+      return new Date(`${day}T23:59:59.999`).toISOString();
+    }
+    const days = Number(preset);
+    if (![1, 3, 7].includes(days)) return null;
+    return new Date(Date.now() + days * 86400000).toISOString();
+  }
+
+  async function createManagedEmailAccess() {
+    clearInlineError(el.emailAccessAdminError);
+    const email = normalizeEmail(el.emailAccessEmailInput.value);
+    const displayName = el.emailAccessNameInput.value.trim();
+    if (!email) return showInlineError(el.emailAccessAdminError, 'Введите корректный email.');
+
+    el.createEmailAccessSubmitButton.disabled = true;
+    try {
+      const token = await currentSupabaseAccessToken();
+      const result = await callManualAccess({
+        action: 'create_email_access',
+        email,
+        display_name: displayName,
+        access_level: el.emailAccessLevelSelect.value,
+        access_expires_at: resolveEmailAccessExpiry()
+      }, token);
+      el.emailAccessAdminDialog.close();
+      await refreshAdminPanel();
+      showAdminCredentials(result, false);
+    } catch (error) {
+      const mapped = manualAccessErrorText(error);
+      showInlineError(el.emailAccessAdminError, mapped === 'Не удалось выполнить действие. Попробуйте ещё раз чуть позже.' ? (error?.message || mapped) : mapped);
+    } finally {
+      el.createEmailAccessSubmitButton.disabled = false;
+    }
+  }
+
+
+  async function createManualVkAccess() {
+    clearInlineError(el.manualVkAdminError);
+    const vkId = normalizeVkId(el.manualVkIdInput.value);
+    const displayName = el.manualVkNameInput.value.trim();
+    if (!vkId) return showInlineError(el.manualVkAdminError, 'Проверьте VK ID: нужны только цифры.');
+    if (!displayName) return showInlineError(el.manualVkAdminError, 'Введите имя пользователя.');
+
+    el.createManualVkAccessButton.disabled = true;
+    try {
+      const token = await currentSupabaseAccessToken();
+      const result = await callManualAccess({
+        action: 'create_access',
+        vk_user_id: vkId,
+        display_name: displayName,
+        source: el.manualVkSourceSelect.value
+      }, token);
+      el.manualVkAdminDialog.close();
+      await refreshAdminPanel();
+      showAdminCredentials(result, false);
+    } catch (error) {
+      showInlineError(el.manualVkAdminError, manualAccessErrorText(error));
+    } finally {
+      el.createManualVkAccessButton.disabled = false;
+    }
+  }
+
+  async function resetManualVkPassword(userId) {
+    const profile = adminProfiles.find(row => row.id === userId && row.login_kind === 'vk_manual');
+    if (!profile) return;
+    if (!window.confirm(`Создать новый временный пароль для ${profileDisplayLabel(profile)}? Старый пароль перестанет работать.`)) return;
+    try {
+      const token = await currentSupabaseAccessToken();
+      const result = await callManualAccess({ action: 'reset_password', auth_user_id: profile.id }, token);
+      await refreshAdminPanel();
+      showAdminCredentials(result, true);
+    } catch (error) {
+      alert(manualAccessErrorText(error));
+    }
+  }
+
+  async function resetManagedEmailPassword(userId) {
+    const profile = adminProfiles.find(row => row.id === userId && row.login_kind === 'email_managed');
+    if (!profile) return;
+    if (!window.confirm(`Создать новый временный пароль для ${profileDisplayLabel(profile)}? Старый пароль перестанет работать.`)) return;
+    try {
+      const token = await currentSupabaseAccessToken();
+      const result = await callManualAccess({ action: 'reset_email_password', auth_user_id: profile.id }, token);
+      await refreshAdminPanel();
+      showAdminCredentials(result, true);
+    } catch (error) {
+      alert(manualAccessErrorText(error));
+    }
+  }
+
+  function copyAdminCredentials() {
+    const text = el.adminCredentialsText?.textContent || '';
+    if (!text) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => showToast('✓ Сообщение с доступом скопировано')).catch(() => {
+        fallbackCopyText(text); showToast('✓ Сообщение с доступом скопировано');
+      });
+    } else {
+      fallbackCopyText(text); showToast('✓ Сообщение с доступом скопировано');
+    }
+  }
+
   function openAuthDialog() {
     clearAuthError();
-    el.authHint.textContent = 'Введите email и пароль приглашённого аккаунта.';
-    if (typeof el.authDialog.showModal === 'function') el.authDialog.showModal();
+    if (el.authHint) el.authHint.textContent = 'Введите email или VK ID, который вы получили для доступа к Navigator.';
+    updateRecoveryVisibility();
+    if (typeof el.authDialog.showModal === 'function' && !el.authDialog.open) el.authDialog.showModal();
+    window.setTimeout(() => el.loginIdentifier?.focus(), 40);
   }
 
   async function signIn() {
     clearAuthError();
     if (!supabaseClient) return showAuthError('Supabase не настроен в config.js.');
-    const email = el.email.value.trim();
+
+    const login = resolveLoginIdentifier(el.loginIdentifier?.value || '');
     const password = el.password.value;
-    if (!email || !password) return showAuthError('Введите email и пароль.');
+    if (!login || !password) return showAuthError('Введите email или числовой VK ID и пароль.');
 
     el.signIn.disabled = true;
     try {
-      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) return showAuthError(authErrorText(error));
-      el.authDialog.close();
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email: login.email, password });
+      if (error) {
+        if (String(error?.code || '') === 'user_banned') {
+          el.authDialog.close();
+          showAccessEnded('Ваш доступ к Navigator завершён.');
+          return;
+        }
+        return showAuthError(/invalid login credentials/i.test(String(error?.message || ''))
+          ? 'Неверный email / VK ID или пароль.'
+          : authErrorText(error));
+      }
+
+      if (el.authDialog?.open) el.authDialog.close();
+      if (data?.user) await activateAuthenticatedSession(data.user);
     } finally {
       el.signIn.disabled = false;
     }
   }
+
+  function openRecoveryDialog() {
+    clearInlineError(el.recoveryError);
+    const identifier = String(el.loginIdentifier?.value || '').trim();
+    el.recoveryVkIdInput.value = identifier;
+    el.recoveryCodeInput.value = '';
+    el.recoveryPasswordInput.value = '';
+    el.recoveryPasswordRepeat.value = '';
+    if (el.authDialog?.open) el.authDialog.close();
+    if (typeof el.recoveryDialog?.showModal === 'function' && !el.recoveryDialog.open) el.recoveryDialog.showModal();
+    window.setTimeout(() => (identifier ? el.recoveryCodeInput : el.recoveryVkIdInput)?.focus(), 40);
+  }
+
+  function showRecoveryCode(code, continuation, recoveredLogin = null) {
+    pendingRecoveryContinuation = continuation;
+    pendingRecoveredLogin = recoveredLogin;
+    el.recoveryCodeValue.textContent = code;
+    if (el.firstPasswordDialog?.open) el.firstPasswordDialog.close();
+    if (el.recoveryDialog?.open) el.recoveryDialog.close();
+    if (typeof el.recoveryCodeDialog?.showModal === 'function' && !el.recoveryCodeDialog.open) {
+      el.recoveryCodeDialog.showModal();
+    }
+  }
+
+  async function saveFirstPassword() {
+    clearInlineError(el.firstPasswordError);
+    const password = el.firstPasswordInput.value;
+    const repeat = el.firstPasswordRepeat.value;
+    if (password.length < 10) return showInlineError(el.firstPasswordError, 'Пароль должен содержать не менее 10 символов.');
+    if (password !== repeat) return showInlineError(el.firstPasswordError, 'Пароли не совпадают.');
+
+    el.saveFirstPasswordButton.disabled = true;
+    try {
+      const token = await currentSupabaseAccessToken();
+      const result = await callManualAccess({ action: 'set_first_password', new_password: password }, token);
+      const identifier = currentProfile?.login_kind === 'vk_manual'
+        ? normalizeVkId(currentProfile?.vk_user_id || '')
+        : String(currentProfile?.email || '').trim();
+      if (currentProfile) currentProfile.must_change_password = false;
+      showRecoveryCode(result.recovery_code, 'login', identifier ? { identifier, password } : null);
+    } catch (error) {
+      const text = manualAccessErrorText(error);
+      if (text === 'access_ended') {
+        if (el.firstPasswordDialog?.open) el.firstPasswordDialog.close();
+        showAccessEnded('Ваш доступ к Navigator завершён.');
+      } else {
+        showInlineError(el.firstPasswordError, text);
+      }
+    } finally {
+      el.saveFirstPasswordButton.disabled = false;
+    }
+  }
+
+  async function recoverPassword() {
+    clearInlineError(el.recoveryError);
+    const identifier = String(el.recoveryVkIdInput.value || '').trim();
+    const login = resolveLoginIdentifier(identifier);
+    const recoveryCode = el.recoveryCodeInput.value.trim();
+    const password = el.recoveryPasswordInput.value;
+    const repeat = el.recoveryPasswordRepeat.value;
+    if (!login) return showInlineError(el.recoveryError, 'Введите корректный email или числовой VK ID.');
+    if (!recoveryCode) return showInlineError(el.recoveryError, 'Введите код восстановления.');
+    if (password.length < 10) return showInlineError(el.recoveryError, 'Пароль должен содержать не менее 10 символов.');
+    if (password !== repeat) return showInlineError(el.recoveryError, 'Пароли не совпадают.');
+
+    el.recoverPasswordButton.disabled = true;
+    try {
+      const result = await callManualAccess({
+        action: 'recover_password',
+        login_identifier: identifier,
+        recovery_code: recoveryCode,
+        new_password: password
+      });
+      showRecoveryCode(result.recovery_code, 'login', { identifier, password });
+    } catch (error) {
+      const text = manualAccessErrorText(error);
+      if (text === 'access_ended') {
+        if (el.recoveryDialog?.open) el.recoveryDialog.close();
+        showAccessEnded('Ваш доступ к Navigator завершён.');
+      } else {
+        showInlineError(el.recoveryError, text);
+      }
+    } finally {
+      el.recoverPasswordButton.disabled = false;
+    }
+  }
+
+  async function confirmRecoveryCodeAndContinue() {
+    if (el.recoveryCodeDialog?.open) el.recoveryCodeDialog.close();
+    const continuation = pendingRecoveryContinuation;
+    const recovered = pendingRecoveredLogin;
+    pendingRecoveryContinuation = null;
+    pendingRecoveredLogin = null;
+
+    if (continuation === 'activate' && currentUser) {
+      await activateAuthenticatedSession(currentUser);
+      return;
+    }
+    if (continuation === 'login' && recovered) {
+      showBoot('Вхожу в Navigator…', 'Новый пароль сохранён · открываю каталог');
+      const login = resolveLoginIdentifier(recovered.identifier || '');
+      if (!login) {
+        showGate('gate');
+        openAuthDialog();
+        showAuthError('Пароль сохранён. Войдите новым паролем.');
+        return;
+      }
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: login.email,
+        password: recovered.password
+      });
+      if (error) {
+        showGate('gate');
+        openAuthDialog();
+        el.loginIdentifier.value = recovered.identifier || '';
+        updateRecoveryVisibility();
+        showAuthError('Пароль изменён, но автоматический вход не удался. Введите новый пароль ещё раз.');
+      } else if (data?.user) {
+        await activateAuthenticatedSession(data.user);
+      }
+    }
+  }
+
+  function copyRecoveryCode() {
+    const code = el.recoveryCodeValue?.textContent || '';
+    if (!code) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(code).then(() => showToast('✓ Код восстановления скопирован')).catch(() => {
+        fallbackCopyText(code); showToast('✓ Код восстановления скопирован');
+      });
+    } else {
+      fallbackCopyText(code); showToast('✓ Код восстановления скопирован');
+    }
+  }
+
 
   async function leaveCurrentMode() {
     if (appMode === 'donut') {
@@ -2603,67 +3388,95 @@
 
   async function recoverSessionOnResume() {
     if (!supabaseClient || resumeValidationInFlight || initialBootPending) return;
+    if (appMode === 'demo' || appMode === 'password_change') return;
     resumeValidationInFlight = true;
+    lastResumeValidationAt = Date.now();
 
     try {
-      // Donut workspace: validate in the background. Never call enterDonutSession
-      // here because it intentionally shows the boot screen and reloads catalog.
+      // Legacy Donut workspace is validated quietly. No boot screen, no catalog
+      // reload, and no check on every quick return from a FIPI tab.
       if (appMode === 'donut') {
         const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
         const vkUserId = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}vk_user_id`) || '';
         if (!token || !vkUserId) {
           donutUserId = null;
-          showGate('gate', 'Сессия VK Donut завершена. Войдите через VK снова.', 'warning');
+          showGate('gate', 'Сессия VK Donut завершена. Войдите снова.', 'warning');
           return;
         }
         try {
           await validateCurrentDonutSessionSilently(token);
-          await refreshBackupRuntime();
+          void refreshBackupRuntime();
         } catch (error) {
           if (Number(error?.status) === 401) {
             sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}session`);
             sessionStorage.removeItem(`${DONUT_STORAGE_PREFIX}vk_user_id`);
             donutUserId = null;
-            showGate('gate', 'Сессия VK Donut истекла. Войдите через VK снова.', 'warning');
+            showGate('gate', 'Сессия VK Donut истекла. Войдите снова.', 'warning');
           } else {
             console.warn('Donut resume validation deferred:', error);
-            // Offline/server hiccup: keep the already-open Navigator visible.
           }
         }
         return;
       }
 
-      if (appMode === 'demo') return;
-
       const user = await confirmSupabaseSessionAfterResume();
-      if (user) {
-        const needsActivation = currentUser?.id !== user.id || !['admin','teacher','demo_user'].includes(appMode);
-        if (needsActivation) await activateAuthenticatedSession(user);
-        else if (isAuthenticatedWorkspaceMode()) await loadCloudStatuses();
+      if (!user) {
+        currentUser = null;
+        currentProfile = null;
+        if (!['gate','pending','blocked'].includes(appMode)) showGate('gate');
         return;
       }
 
-      // Only now, after a double confirmation, is the session truly absent.
-      currentUser = null;
-      currentProfile = null;
-      if (!['gate','pending','blocked'].includes(appMode)) showGate('gate');
+      const needsActivation = currentUser?.id !== user.id || !['admin','teacher','demo_user'].includes(appMode);
+      if (needsActivation) {
+        await activateAuthenticatedSession(user);
+        return;
+      }
+
+      // Positive access check only. A temporary network problem never replaces
+      // a visible Navigator with login/boot. Only an actual blocked/expired row does.
+      try {
+        const profile = await fetchProfile(user.id);
+        currentProfile = profile;
+        if (profile.status === 'blocked') {
+          showAccessEnded('Ваш доступ к Navigator завершён.');
+          return;
+        }
+        if (profile.status !== 'active' || isProfileExpired(profile)) {
+          showAccessEnded(isProfileExpired(profile) ? 'Срок доступа к Navigator закончился.' : 'Для этого аккаунта нет активного доступа к Navigator.');
+          return;
+        }
+        if (profile.login_kind === 'vk_manual' && profile.must_change_password) {
+          showForcedPasswordDialog();
+          return;
+        }
+      } catch (error) {
+        console.warn('Silent access recheck deferred:', error);
+        return;
+      }
+
+      if (Date.now() - lastVisibleStatusRefreshAt >= RESUME_STATUS_RECHECK_MS) {
+        lastVisibleStatusRefreshAt = Date.now();
+        void loadCloudStatuses();
+      }
     } catch (error) {
       console.error('Session resume check failed:', error);
-      // TRUE no-flicker: temporary network/refresh errors never replace a visible
-      // Navigator with boot/login. The current screen stays untouched.
+      // TRUE no-flicker: network/refresh errors leave the current workspace visible.
     } finally {
       resumeValidationInFlight = false;
     }
   }
 
-  function scheduleResumeValidation() {
+  function scheduleResumeValidation(force = false) {
     if (initialBootPending || !supabaseClient) return;
+    if (!force && Date.now() - lastResumeValidationAt < RESUME_ACCESS_RECHECK_MS) return;
     if (resumeValidationTimer) window.clearTimeout(resumeValidationTimer);
     resumeValidationTimer = window.setTimeout(() => {
       resumeValidationTimer = null;
       recoverSessionOnResume();
-    }, 120);
+    }, 220);
   }
+
 
   async function handleAuthStateChange(event, session) {
     const user = session?.user || null;
@@ -2679,8 +3492,11 @@
     }
 
     if (appMode === 'demo' && event === 'INITIAL_SESSION') return;
-    if (currentUser?.id === user.id && ['admin','teacher','demo_user','pending','blocked'].includes(appMode)) {
-      if (isAuthenticatedWorkspaceMode()) void loadCloudStatuses();
+    if (currentUser?.id === user.id && ['admin','teacher','demo_user','pending','blocked','password_change'].includes(appMode)) {
+      if (isAuthenticatedWorkspaceMode() && Date.now() - lastVisibleStatusRefreshAt >= RESUME_STATUS_RECHECK_MS) {
+        lastVisibleStatusRefreshAt = Date.now();
+        void loadCloudStatuses();
+      }
       return;
     }
     await activateAuthenticatedSession(user);
@@ -2713,19 +3529,26 @@
   }
 
   function refreshWhenVisible() {
-    if (document.visibilityState === 'visible' && currentUser && isAuthenticatedWorkspaceMode()) {
-      loadCloudStatuses();
-    }
-    if (document.visibilityState === 'visible' && appMode === 'donut') {
-      void refreshBackupRuntime();
+    if (document.visibilityState !== 'visible') return;
+    if (currentUser && isAuthenticatedWorkspaceMode() && Date.now() - lastVisibleStatusRefreshAt >= RESUME_STATUS_RECHECK_MS) {
+      lastVisibleStatusRefreshAt = Date.now();
+      void loadCloudStatuses();
     }
   }
 
   window.setInterval(() => {
-    if (appMode === 'donut' && document.visibilityState === 'visible') {
+    if (document.visibilityState !== 'visible') return;
+    if (appMode === 'donut' || (currentUser && isAuthenticatedWorkspaceMode())) {
       void refreshBackupRuntime();
     }
   }, 60000);
+
+  // Low-frequency access check while the Navigator stays open. It is silent and
+  // never shows boot; it only reacts to a confirmed blocked/expired state.
+  window.setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (appMode === 'donut' || (currentUser && isAuthenticatedWorkspaceMode())) scheduleResumeValidation();
+  }, RESUME_ACCESS_RECHECK_MS);
 
   el.topic.addEventListener('change', () => { populateSubtopics(); render(); });
   el.subtopic.addEventListener('change', render);
@@ -2741,8 +3564,22 @@
   el.headerLoginButton.addEventListener('click', openAuthDialog);
   el.openDemoButton.addEventListener('click', startDemo);
   el.signOutButton.addEventListener('click', leaveCurrentMode);
+  el.sourceBadge?.addEventListener('click', togglePersonalSource);
   el.signIn.addEventListener('click', signIn);
   el.password.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+  el.loginIdentifier?.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+  el.loginIdentifier?.addEventListener('input', updateRecoveryVisibility);
+  el.forgotVkPasswordButton?.addEventListener('click', openRecoveryDialog);
+  el.saveFirstPasswordButton?.addEventListener('click', saveFirstPassword);
+  el.firstPasswordRepeat?.addEventListener('keydown', e => { if (e.key === 'Enter') saveFirstPassword(); });
+  el.recoverPasswordButton?.addEventListener('click', recoverPassword);
+  el.recoveryPasswordRepeat?.addEventListener('keydown', e => { if (e.key === 'Enter') recoverPassword(); });
+  el.closeRecoveryDialogButton?.addEventListener('click', () => el.recoveryDialog.close());
+  el.copyRecoveryCodeButton?.addEventListener('click', copyRecoveryCode);
+  el.confirmRecoveryCodeButton?.addEventListener('click', confirmRecoveryCodeAndContinue);
+  el.closeAccessEndedButton?.addEventListener('click', () => el.accessEndedDialog.close());
+  el.firstPasswordDialog?.addEventListener('cancel', e => e.preventDefault());
+  el.recoveryCodeDialog?.addEventListener('cancel', e => e.preventDefault());
 
 
   el.adminAccessButton.addEventListener('click', openAdminPanel);
@@ -2755,6 +3592,19 @@
   el.refreshAdminUsersButton.addEventListener('click', async () => { await Promise.allSettled([refreshAdminPanel(), refreshStatistics(), refreshBackupRuntime()]); renderBackupAdminState(); renderAdminDemoState(); renderAdminUsers(); });
   el.adminParticipantsTab?.addEventListener('click', () => setAdminTab('participants'));
   el.adminDonutTab?.addEventListener('click', () => setAdminTab('donut'));
+  el.createManualVkButton?.addEventListener('click', () => openManualVkAdminDialog('', '', 'donut'));
+  el.createEmailAccessButton?.addEventListener('click', openEmailAccessAdminDialog);
+  el.closeEmailAccessAdminDialogButton?.addEventListener('click', () => el.emailAccessAdminDialog.close());
+  el.createEmailAccessSubmitButton?.addEventListener('click', createManagedEmailAccess);
+  el.emailAccessEmailInput?.addEventListener('keydown', e => { if (e.key === 'Enter') createManagedEmailAccess(); });
+  el.emailAccessExpiryPresetSelect?.addEventListener('change', () => {
+    el.emailAccessCustomExpiryLabel.classList.toggle('hidden', el.emailAccessExpiryPresetSelect.value !== 'custom');
+  });
+  el.closeManualVkAdminDialogButton?.addEventListener('click', () => el.manualVkAdminDialog.close());
+  el.createManualVkAccessButton?.addEventListener('click', createManualVkAccess);
+  el.manualVkIdInput?.addEventListener('keydown', e => { if (e.key === 'Enter') createManualVkAccess(); });
+  el.copyAdminCredentialsButton?.addEventListener('click', copyAdminCredentials);
+  el.closeAdminCredentialsButton?.addEventListener('click', () => el.adminCredentialsDialog.close());
   el.refreshStatsButton.addEventListener('click', async () => { await refreshStatistics(); renderAdminUsers(); });
   el.statsPeriodSelect.addEventListener('change', () => {
     const custom = el.statsPeriodSelect.value === 'custom';
@@ -2814,7 +3664,7 @@
   }, { once: true });
 
   async function bootstrap() {
-    showBoot('Загружаю Navigator…');
+    showBoot('Открываю Navigator…', 'Восстанавливаю сохранённый вход');
     const cloudReady = await initCloud();
     if (!cloudReady) return;
 

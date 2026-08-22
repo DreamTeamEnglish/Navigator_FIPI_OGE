@@ -6,6 +6,11 @@
   <meta name="color-scheme" content="dark" />
   <title>OGE Lexical Navigator · FIPI</title>
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    #sourceBadge{font:inherit;cursor:pointer}
+    #sourceBadge.source-yandex{box-shadow:0 0 0 1px rgba(229,189,98,.35) inset}
+    #sourceBadge:disabled{cursor:not-allowed;opacity:.68}
+  </style>
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -24,6 +29,7 @@
     </div>
 
     <div class="auth-area">
+      <button id="sourceBadge" class="cloud-badge source hidden" type="button" title="Выбрать источник задания">Источник: FIPI</button>
       <span id="cloudBadge" class="cloud-badge protected">PROTECTED</span>
       <button id="adminAccessButton" class="button secondary hidden" type="button">⚙ Доступ</button>
       <button id="headerLoginButton" class="button secondary hidden" type="button">Войти</button>
@@ -34,9 +40,14 @@
   <section id="bootState" class="boot-state" aria-live="polite">
     <div class="boot-card">
       <span class="boot-mark">OGE</span>
-      <div>
-        <strong id="bootMessage">Загружаю Navigator…</strong>
-        <span>Проверяю сохранённый доступ</span>
+      <div class="boot-copy">
+        <div class="boot-title-row">
+          <strong id="bootMessage">Открываю Navigator…</strong>
+          <span class="boot-secure">SECURE</span>
+        </div>
+        <span id="bootDetail" class="boot-detail">Восстанавливаю сохранённый вход</span>
+        <div class="boot-progress" aria-hidden="true"><span></span></div>
+        <small id="bootSlowNote" class="boot-slow-note">Повторный вход обычно не требуется</small>
       </div>
     </div>
   </section>
@@ -45,16 +56,16 @@
     <div class="access-card">
       <span class="gold-kicker">PROTECTED NAVIGATOR</span>
       <h2>Тематический поиск по заданиям ОГЭ ФИПИ</h2>
-      <p>Полный каталог доступен участникам VK Donut или по приглашению администратора. Для знакомства с возможностями Navigator откройте DEMO-версию.</p>
+      <p>Полный каталог доступен пользователям с персональным доступом. Для знакомства с возможностями Navigator откройте DEMO-версию.</p>
 
       <div id="accessMessage" class="access-message hidden"></div>
 
       <div class="access-actions">
-        <button id="openDonutButton" class="button primary access-main-button" type="button">Войти через VK Donut</button>
         <button id="openLoginButton" class="button primary access-main-button" type="button">Войти</button>
         <button id="openDemoButton" class="button secondary access-main-button" type="button">Попробовать DEMO</button>
+        <button id="openDonutButton" class="button ghost access-main-button legacy-donut-login hidden" type="button">VK Donut · старый вход</button>
       </div>
-      <p class="access-note">Доступ выдаётся участникам группы VK Donut или по приглашению администратора.</p>
+      <p class="access-note">Доступ выдаётся участникам VK Donut или по приглашению администратора.</p>
       <div class="admin-contact-actions">
         <a class="admin-contact-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
           ✉ Нужен доступ? Напишите администратору
@@ -136,21 +147,26 @@
   </footer>
 
   <dialog id="authDialog">
-    <form method="dialog" class="dialog-card" id="authForm">
+    <form method="dialog" class="dialog-card auth-dialog-card" id="authForm">
       <button class="dialog-close" value="cancel" aria-label="Закрыть">×</button>
-      <span class="gold-kicker">INVITED ACCESS</span>
-      <h3>Вход</h3>
-      <p id="authHint">Введите email и пароль приглашённого аккаунта.</p>
+      <span class="gold-kicker">PROTECTED ACCESS</span>
+      <h3>Вход в Navigator</h3>
+
+      <p id="authHint">Введите email или VK ID, который вы получили для доступа к Navigator.</p>
+
       <label>
-        <span>Email</span>
-        <input id="emailInput" type="email" autocomplete="email" placeholder="teacher@example.com" />
+        <span>Email или VK ID</span>
+        <input id="loginIdentifierInput" type="text" autocomplete="username" placeholder="teacher@example.com или 123456789" />
       </label>
+      <p class="manual-auth-note auth-identity-note">Доны вводят числовой VK ID · приглашённые пользователи — email.</p>
+
       <label>
         <span>Пароль</span>
         <input id="passwordInput" type="password" autocomplete="current-password" placeholder="••••••••" />
       </label>
       <div id="authError" class="auth-error hidden"></div>
       <button id="signInButton" class="button primary wide" type="button">Войти</button>
+      <button id="forgotVkPasswordButton" class="auth-forgot-button hidden" type="button">Забыли пароль?</button>
       <p class="dialog-note">
         <a class="admin-contact-link compact-contact" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>
           ✉ Нужен доступ? Напишите администратору
@@ -159,6 +175,57 @@
     </form>
   </dialog>
 
+  <dialog id="firstPasswordDialog" class="dialog-shell">
+    <div class="dialog-card manual-auth-card">
+      <span class="gold-kicker">ПЕРВЫЙ ВХОД</span>
+      <h3>Создайте свой пароль</h3>
+      <p>Временный пароль сработал. Теперь придумайте постоянный — такой, который удобно помнить именно вам.</p>
+      <label><span>Новый пароль</span><input id="firstPasswordInput" type="password" autocomplete="new-password" placeholder="Не менее 10 символов" /></label>
+      <label><span>Повторите пароль</span><input id="firstPasswordRepeat" type="password" autocomplete="new-password" placeholder="Повторите пароль" /></label>
+      <div id="firstPasswordError" class="auth-error hidden"></div>
+      <button id="saveFirstPasswordButton" class="button primary wide" type="button">Сохранить пароль</button>
+      <p class="manual-auth-note">Это окно нельзя пропустить: после сохранения временный пароль перестанет действовать.</p>
+    </div>
+  </dialog>
+
+  <dialog id="recoveryDialog" class="dialog-shell">
+    <div class="dialog-card manual-auth-card">
+      <button id="closeRecoveryDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ВОССТАНОВЛЕНИЕ ДОСТУПА</span>
+      <h3>Забыли пароль?</h3>
+      <p>Введите email или VK ID, сохранённый код восстановления и сразу придумайте новый пароль.</p>
+      <label><span>Email или VK ID</span><input id="recoveryVkIdInput" type="text" autocomplete="username" placeholder="teacher@example.com или 123456789" /></label>
+      <label><span>Код восстановления</span><input id="recoveryCodeInput" type="text" autocomplete="off" placeholder="DTE-XXXX-XXXX-XXXX-XXXX" /></label>
+      <label><span>Новый пароль</span><input id="recoveryPasswordInput" type="password" autocomplete="new-password" placeholder="Не менее 10 символов" /></label>
+      <label><span>Повторите пароль</span><input id="recoveryPasswordRepeat" type="password" autocomplete="new-password" placeholder="Повторите пароль" /></label>
+      <div id="recoveryError" class="auth-error hidden"></div>
+      <button id="recoverPasswordButton" class="button primary wide" type="button">Сменить пароль и войти</button>
+      <p class="dialog-note"><a class="admin-contact-link compact-contact" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer" data-admin-contact>✉ Нет кода восстановления? Напишите администратору</a></p>
+    </div>
+  </dialog>
+
+  <dialog id="recoveryCodeDialog" class="dialog-shell">
+    <div class="dialog-card recovery-code-card">
+      <span class="gold-kicker">ВАЖНО · СОХРАНИТЕ</span>
+      <h3>Код восстановления</h3>
+      <p>Он понадобится только если вы забудете пароль. На почту ничего отправлять не нужно.</p>
+      <div id="recoveryCodeValue" class="recovery-code-value">DTE-XXXX-XXXX-XXXX-XXXX</div>
+      <button id="copyRecoveryCodeButton" class="button secondary wide" type="button">Скопировать код</button>
+      <button id="confirmRecoveryCodeButton" class="button primary wide" type="button">Я сохранил(а) · продолжить</button>
+      <p class="manual-auth-note">Navigator хранит не сам код, а его защищённый отпечаток. После восстановления будет выдан новый код.</p>
+    </div>
+  </dialog>
+
+  <dialog id="accessEndedDialog" class="dialog-shell">
+    <div class="dialog-card access-ended-card">
+      <span class="gold-kicker">ДОСТУП К NAVIGATOR</span>
+      <h3>Доступ завершён</h3>
+      <p id="accessEndedText">Срок доступа к Navigator закончился.</p>
+      <p>Для продления обратитесь к администратору.</p>
+      <a class="button primary wide button-link" href="https://vk.ru/im?sel=-229391051" target="_blank" rel="noopener noreferrer">✉ Написать администратору</a>
+      <button id="closeAccessEndedButton" class="button ghost wide" type="button">Закрыть</button>
+    </div>
+  </dialog>
 
   <dialog id="topicDialog">
     <div class="dialog-card topic-dialog-card">
@@ -215,8 +282,9 @@
           <span id="adminDemoState" class="hidden" aria-hidden="true"></span>
           <button id="toggleDemoButton" class="admin-toolbar-button" type="button">DEMO: —</button>
           <button id="previewDemoButton" class="admin-toolbar-button" type="button">Открыть DEMO ↗</button>
+          <button id="ogeBackupReadyButton" class="admin-toolbar-button" type="button">Резерв: —</button>
           <button id="ogeBackupPreviewButton" class="admin-toolbar-button" type="button">PREVIEW: —</button>
-          <button id="ogeBackupSourceButton" class="admin-toolbar-button source" type="button">Источник: FIPI</button>
+          <button id="ogeBackupSourceButton" class="admin-toolbar-button source" type="button">По умолчанию: FIPI</button>
           <button id="refreshAdminUsersButton" class="admin-toolbar-button refresh" type="button">↻ Обновить</button>
         </div>
       </div>
@@ -264,11 +332,19 @@
       </div>
 
       <section id="adminParticipantsPanel" class="admin-panel">
+        <div class="admin-manual-access-bar">
+          <div><strong>Email-доступ по приглашению</strong><span>Создайте пользователю вход по его email. При первом входе он сменит временный пароль на свой.</span></div>
+          <button id="createEmailAccessButton" class="admin-toolbar-button" type="button">+ Email-доступ</button>
+        </div>
         <div id="adminUserStats" class="admin-user-stats admin-user-stats-top">Загрузка…</div>
         <div id="adminUsersList" class="admin-user-list"></div>
       </section>
 
       <section id="adminDonutPanel" class="admin-panel hidden">
+        <div class="admin-manual-access-bar">
+          <div><strong>Перенос VK Donut на Яндекс</strong><span>Для старого дона нажмите «Создать вход на Яндекс» в его карточке. GitHub-вход при этом сохраняется.</span></div>
+          <button id="createManualVkButton" class="admin-toolbar-button" type="button">+ VK-доступ</button>
+        </div>
         <div id="adminDonutList" class="admin-user-list"></div>
       </section>
     </div>
@@ -322,12 +398,53 @@
     </div>
   </dialog>
 
+
+  <dialog id="emailAccessAdminDialog" class="dialog-shell">
+    <div class="dialog-card manual-auth-card">
+      <button id="closeEmailAccessAdminDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ADMIN · EMAIL ACCESS</span>
+      <h3>Создать доступ по email</h3>
+      <p>Пользователь получит временный пароль, а при первом входе создаст свой постоянный пароль и код восстановления.</p>
+      <label><span>Имя · необязательно</span><input id="emailAccessNameInput" type="text" maxlength="160" placeholder="Анна Иванова" /></label>
+      <label><span>Email</span><input id="emailAccessEmailInput" type="email" autocomplete="off" placeholder="teacher@example.com" /></label>
+      <label><span>Уровень доступа</span><select id="emailAccessLevelSelect"><option value="full">FULL · полный каталог</option><option value="demo">DEMO · 44 карточки</option></select></label>
+      <label><span>Срок</span><select id="emailAccessExpiryPresetSelect"><option value="none">Бессрочно</option><option value="1">1 день</option><option value="3">3 дня</option><option value="7">7 дней</option><option value="custom">Своя дата</option></select></label>
+      <label id="emailAccessCustomExpiryLabel" class="hidden"><span>Доступ до конца дня</span><input id="emailAccessCustomExpiryDate" type="date" /></label>
+      <div id="emailAccessAdminError" class="auth-error hidden"></div>
+      <button id="createEmailAccessSubmitButton" class="button primary wide" type="button">Создать доступ</button>
+    </div>
+  </dialog>
+
+  <dialog id="manualVkAdminDialog" class="dialog-shell">
+    <div class="dialog-card manual-auth-card">
+      <button id="closeManualVkAdminDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
+      <span class="gold-kicker">ADMIN · VK ACCESS</span>
+      <h3 id="manualVkAdminTitle">Создать постоянный вход</h3>
+      <p>Пользователь будет входить по VK ID и паролю. Email ему не нужен.</p>
+      <label><span>Имя</span><input id="manualVkNameInput" type="text" maxlength="160" placeholder="Анна Иванова" /></label>
+      <label><span>VK ID</span><input id="manualVkIdInput" type="text" inputmode="numeric" placeholder="123456789" /></label>
+      <label><span>Источник доступа</span><select id="manualVkSourceSelect"><option value="donut">VK Donut</option><option value="invite">По приглашению</option></select></label>
+      <div id="manualVkAdminError" class="auth-error hidden"></div>
+      <button id="createManualVkAccessButton" class="button primary wide" type="button">Создать доступ</button>
+    </div>
+  </dialog>
+
+  <dialog id="adminCredentialsDialog" class="dialog-shell">
+    <div class="dialog-card credentials-card">
+      <span class="gold-kicker">ДОСТУП ГОТОВ</span>
+      <h3>Отправьте пользователю</h3>
+      <pre id="adminCredentialsText" class="credentials-text"></pre>
+      <button id="copyAdminCredentialsButton" class="button primary wide" type="button">Скопировать сообщение</button>
+      <button id="closeAdminCredentialsButton" class="button ghost wide" type="button">Готово</button>
+      <p class="manual-auth-note">Временный пароль показывается только сейчас. При первом входе пользователь создаст свой пароль и получит код восстановления.</p>
+    </div>
+  </dialog>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=099y3-2-full-view"></script>
 </body>
 </html>

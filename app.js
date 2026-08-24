@@ -1,4 +1,4 @@
-// Navigator_FIPI_OGE v0.9.9Y3.1 HOTFIX — personal FIPI/Yandex source switch · known-good Yandex auth fixes preserved · viewer v0.2.3 unchanged
+// Navigator_FIPI_OGE v0.9.9Y4 HYBRID — protected Object Storage catalog + IndexedDB cache · legacy fallback preserved · viewer v0.2.3 unchanged
 (() => {
   'use strict';
 
@@ -20,6 +20,10 @@
   const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
   const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
   const BACKUP_GATEWAY_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-backup-gateway`;
+  const DELIVERY_FUNCTION_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-delivery`;
+  const CATALOG_CACHE_DB = 'oge-navigator-protected-catalog-v1';
+  const CATALOG_CACHE_STORE = 'catalogs';
+  const CATALOG_CACHE_KEY = 'full';
   const BACKUP_PREVIEW_KEY = 'oge-backup-admin-preview-v020';
   const BACKUP_VIEWER_RENDER_VERSION = '0.2.3';
   const SOURCE_PREF_PREFIX = 'oge-navigator-source-pref-v099y3:';
@@ -1821,20 +1825,207 @@
     return data || [];
   }
 
-  async function fetchFullCatalog() {
-    // The OGE bank currently fits into two 1000-row pages. Fetch the first two
-    // pages concurrently so cold start does not wait for two serial round trips.
+  async function fetchFullCatalogLegacy() {
+    // Legacy rollback path: protected PostgREST catalog in Supabase.
+    // Keep this intact throughout HYBRID stabilization.
     const firstPages = await Promise.all([fetchCatalogPage(0), fetchCatalogPage(1)]);
     const cards = firstPages.flatMap(page => page.map(row => row.card).filter(Boolean));
     if (firstPages[1].length < CATALOG_PAGE_SIZE) return cards;
 
-    // Generic continuation if the bank grows beyond 2000 rows later.
     for (let pageIndex = 2; ; pageIndex += 1) {
       const page = await fetchCatalogPage(pageIndex);
       cards.push(...page.map(row => row.card).filter(Boolean));
       if (page.length < CATALOG_PAGE_SIZE) break;
     }
     return cards;
+  }
+
+  function openCatalogCacheDb() {
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) return reject(new Error('IndexedDB is unavailable'));
+      const request = indexedDB.open(CATALOG_CACHE_DB, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(CATALOG_CACHE_STORE)) {
+          db.createObjectStore(CATALOG_CACHE_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+      request.onblocked = () => reject(new Error('IndexedDB upgrade is blocked'));
+    });
+  }
+
+  async function readCatalogCache() {
+    const db = await openCatalogCacheDb();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(CATALOG_CACHE_STORE, 'readonly');
+        const request = tx.objectStore(CATALOG_CACHE_STORE).get(CATALOG_CACHE_KEY);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async function writeCatalogCache(entry) {
+    const db = await openCatalogCacheDb();
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(CATALOG_CACHE_STORE, 'readwrite');
+        tx.objectStore(CATALOG_CACHE_STORE).put(entry, CATALOG_CACHE_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB write failed'));
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async function clearCatalogCache() {
+    try {
+      const db = await openCatalogCacheDb();
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(CATALOG_CACHE_STORE, 'readwrite');
+          tx.objectStore(CATALOG_CACHE_STORE).delete(CATALOG_CACHE_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error || new Error('IndexedDB delete failed'));
+          tx.onabort = () => reject(tx.error || new Error('IndexedDB delete aborted'));
+        });
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      console.warn('OGE catalog cache cleanup skipped:', error);
+    }
+  }
+
+  async function sha256HexBuffer(buffer) {
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function parseCompressedCatalog(buffer, descriptor) {
+    if (!(buffer instanceof ArrayBuffer)) throw new Error('Catalog bytes are invalid.');
+    if (Number(descriptor.bytes) && buffer.byteLength !== Number(descriptor.bytes)) {
+      throw new Error(`Catalog size mismatch: ${buffer.byteLength} != ${descriptor.bytes}`);
+    }
+
+    const digest = await sha256HexBuffer(buffer);
+    if (digest !== String(descriptor.sha256 || '').toLowerCase()) {
+      throw new Error('Catalog SHA-256 mismatch.');
+    }
+
+    if (typeof DecompressionStream !== 'function') {
+      throw new Error('This browser does not support gzip catalog decoding.');
+    }
+
+    const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const text = await new Response(stream).text();
+    const payload = JSON.parse(text);
+    const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+    const expectedCount = Number(descriptor.card_count || 0);
+
+    if (!cards.length || (expectedCount && cards.length !== expectedCount)) {
+      throw new Error(`Catalog card count mismatch: ${cards.length} != ${expectedCount || 'expected'}`);
+    }
+
+    const ids = new Set();
+    for (const card of cards) {
+      const fipiId = String(card?.fipiId || card?.fipi_id || '');
+      if (!fipiId || !card?.bucket || !card?.url || ids.has(fipiId)) {
+        throw new Error('Catalog semantic validation failed.');
+      }
+      ids.add(fipiId);
+    }
+
+    return cards;
+  }
+
+  async function requestObjectStorageCatalogDescriptor() {
+    const token = await currentAccessToken();
+    const response = await fetch(DELIVERY_FUNCTION_URL, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store'
+    });
+
+    let data = null;
+    try { data = await response.json(); } catch {}
+
+    if (response.status === 409 && data?.error === 'object_storage_not_enabled') {
+      return null;
+    }
+    if (!response.ok || !data?.ok || !data?.catalog?.url) {
+      const error = new Error(`Object Storage delivery unavailable (${response.status}).`);
+      error.status = response.status;
+      error.payload = data;
+      throw error;
+    }
+    return data;
+  }
+
+  async function fetchFullCatalogFromObjectStorage() {
+    const delivery = await requestObjectStorageCatalogDescriptor();
+    if (!delivery) return null;
+
+    const descriptor = delivery.catalog;
+    const cacheIdentity = `${descriptor.version || ''}:${descriptor.sha256 || ''}`;
+
+    try {
+      const cached = await readCatalogCache();
+      if (cached?.identity === cacheIdentity && cached?.bytes instanceof ArrayBuffer) {
+        if (el.bootDetail) el.bootDetail.textContent = `Доступ подтверждён · локальный каталог ${descriptor.version}`;
+        try {
+          const cards = await parseCompressedCatalog(cached.bytes, descriptor);
+          console.info(`OGE catalog ${descriptor.version}: IndexedDB cache hit (${cards.length} cards).`);
+          return cards;
+        } catch (error) {
+          console.warn('Cached OGE catalog failed verification; refreshing:', error);
+          await clearCatalogCache();
+        }
+      }
+    } catch (error) {
+      console.warn('OGE IndexedDB cache unavailable; continuing with network:', error);
+    }
+
+    if (el.bootDetail) el.bootDetail.textContent = `Доступ подтверждён · загружаю каталог ${descriptor.version}`;
+    const response = await fetch(descriptor.url, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) throw new Error(`Object Storage catalog HTTP ${response.status}.`);
+    const bytes = await response.arrayBuffer();
+    const cards = await parseCompressedCatalog(bytes, descriptor);
+
+    try {
+      await writeCatalogCache({
+        identity: cacheIdentity,
+        version: descriptor.version,
+        sha256: descriptor.sha256,
+        card_count: descriptor.card_count,
+        bytes,
+        stored_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.warn('OGE catalog cache write skipped:', error);
+    }
+
+    console.info(`OGE catalog ${descriptor.version}: Object Storage download (${cards.length} cards, ${bytes.byteLength} bytes).`);
+    return cards;
+  }
+
+  async function fetchFullCatalog() {
+    try {
+      const objectStorageCards = await fetchFullCatalogFromObjectStorage();
+      if (objectStorageCards) return objectStorageCards;
+      console.info('OGE delivery manifest is LEGACY; using protected Supabase catalog.');
+    } catch (error) {
+      console.warn('OGE Object Storage delivery failed; falling back to protected Supabase catalog:', error);
+      if (el.bootDetail) el.bootDetail.textContent = 'Защищённый резервный путь · загружаю каталог';
+    }
+    return fetchFullCatalogLegacy();
   }
 
 

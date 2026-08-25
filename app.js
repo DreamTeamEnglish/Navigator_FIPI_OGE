@@ -1,4 +1,4 @@
-// Navigator_FIPI_OGE v0.9.9Y4 HYBRID — protected Object Storage catalog + IndexedDB cache · legacy fallback preserved · viewer v0.2.3 unchanged
+// Navigator_FIPI_OGE v0.9.9Y5 MEDIA HYBRID — Object Storage catalog + direct protected media · IndexedDB catalog cache · legacy fallbacks preserved
 (() => {
   'use strict';
 
@@ -20,6 +20,7 @@
   const DONUT_FUNCTION_URL = 'https://cyskqzsrcoxgxhidmkng.supabase.co/functions/v1/vk-donut-access';
   const DONUT_STORAGE_PREFIX = 'oge-navigator-donut:';
   const BACKUP_GATEWAY_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-backup-gateway`;
+  const MEDIA_DELIVERY_FUNCTION_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-media-delivery`;
   const DELIVERY_FUNCTION_URL = `${CONFIG.supabaseUrl || 'https://cyskqzsrcoxgxhidmkng.supabase.co'}/functions/v1/oge-delivery`;
   const CATALOG_CACHE_DB = 'oge-navigator-protected-catalog-v1';
   const CATALOG_CACHE_STORE = 'catalogs';
@@ -1439,12 +1440,72 @@
     return data || {};
   }
 
-  async function fetchBackupMediaBlob(mediaId, access) {
+  async function fetchLegacyBackupMediaBlob(mediaId, access) {
     const response = await fetch(`${BACKUP_GATEWAY_URL}?media_id=${encodeURIComponent(mediaId)}`, {
       headers: backupGatewayHeaders(access)
     });
-    if (!response.ok) throw new Error(`media ${mediaId}: HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`legacy media ${mediaId}: HTTP ${response.status}`);
     return response.blob();
+  }
+
+  function validateSignedMediaUrl(value) {
+    try {
+      const u = new URL(String(value || ''));
+      if (u.protocol !== 'https:' || u.hostname !== 'storage.yandexcloud.net') return false;
+      const expectedPrefix = '/navigator-fipi-protected-data-dreamteam/oge/media/';
+      return u.pathname.startsWith(expectedPrefix);
+    } catch {
+      return false;
+    }
+  }
+
+  async function fetchObjectStorageMedia(mediaId, access) {
+    // The historical hidden Donut session is not a Supabase Auth JWT.
+    // Keep it on the proven legacy gateway. Current VK-ID/email FULL logins
+    // use Supabase Auth and therefore take the direct Object Storage route.
+    if (access?.kind === 'donut') {
+      throw new Error('legacy donut media session');
+    }
+
+    const headers = backupGatewayHeaders(access);
+    if (!headers.Authorization) throw new Error('Supabase media session missing');
+
+    const response = await fetch(
+      `${MEDIA_DELIVERY_FUNCTION_URL}?media_id=${encodeURIComponent(mediaId)}`,
+      { headers }
+    );
+
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch {}
+
+    if (!response.ok || !data?.url) {
+      throw new Error(`object media ${mediaId}: HTTP ${response.status} ${data?.error || raw || 'signed URL unavailable'}`);
+    }
+    if (!validateSignedMediaUrl(data.url)) {
+      throw new Error(`object media ${mediaId}: unexpected signed URL`);
+    }
+
+    return {
+      url: data.url,
+      direct: true,
+      expiresAt: data.expires_at || '',
+      objectKey: data.object_key || ''
+    };
+  }
+
+  async function resolveBackupMediaSource(mediaId, access) {
+    try {
+      const direct = await fetchObjectStorageMedia(mediaId, access);
+      console.info(`OGE media ${mediaId}: Object Storage direct`);
+      return direct;
+    } catch (error) {
+      console.warn(`OGE media ${mediaId}: Object Storage unavailable; legacy Yandex.Disk fallback`, error);
+      const blob = await fetchLegacyBackupMediaBlob(mediaId, access);
+      const url = URL.createObjectURL(blob);
+      backupObjectUrls.push(url);
+      return { url, direct: false, expiresAt: '', objectKey: '' };
+    }
   }
 
   async function renderBackupMedia(container, media, token) {
@@ -1460,10 +1521,15 @@
       const box = section.querySelector('.oge-backup-media');
       for (const m of images) {
         try {
-          const blob = await fetchBackupMediaBlob(m.media_id, token);
-          const url = URL.createObjectURL(blob); backupObjectUrls.push(url);
-          const img = document.createElement('img'); img.src = url; img.alt = `Изображение задания ${m.media_id}`; box.appendChild(img);
-        } catch (error) { box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть изображение: ${escapeHtml(error?.message || error)}</div>`); }
+          const source = await resolveBackupMediaSource(m.media_id, token);
+          const img = document.createElement('img');
+          img.src = source.url;
+          img.alt = `Изображение задания ${m.media_id}`;
+          img.dataset.delivery = source.direct ? 'object-storage' : 'legacy-disk';
+          box.appendChild(img);
+        } catch (error) {
+          box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть изображение: ${escapeHtml(error?.message || error)}</div>`);
+        }
       }
     }
 
@@ -1475,10 +1541,17 @@
       const box = section.querySelector('.oge-backup-media');
       for (const m of audio) {
         try {
-          const blob = await fetchBackupMediaBlob(m.media_id, token);
-          const url = URL.createObjectURL(blob); backupObjectUrls.push(url);
-          const player = document.createElement('audio'); player.controls = true; player.preload = 'metadata'; player.src = url; box.appendChild(player);
-        } catch (error) { box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть аудио: ${escapeHtml(error?.message || error)}</div>`); }
+          const source = await resolveBackupMediaSource(m.media_id, token);
+          const player = document.createElement('audio');
+          player.controls = true;
+          player.preload = 'metadata';
+          player.src = source.url;
+          player.dataset.delivery = source.direct ? 'object-storage' : 'legacy-disk';
+          if (source.expiresAt) player.dataset.signedUrlExpiresAt = source.expiresAt;
+          box.appendChild(player);
+        } catch (error) {
+          box.insertAdjacentHTML('beforeend', `<div class="oge-backup-note">Не удалось открыть аудио: ${escapeHtml(error?.message || error)}</div>`);
+        }
       }
     }
 

@@ -356,7 +356,18 @@
       <button id="closeUserAccessDialogButton" class="dialog-close" type="button" aria-label="Закрыть">×</button>
       <span class="gold-kicker">ADMIN · USER ACCESS</span>
       <h3>Доступ пользователя</h3>
-      <p id="userAccessEmail" class="user-access-email"></p>
+
+      <label>
+        <span>Имя · как показывать в админке</span>
+        <input id="userAccessNameInput" type="text" maxlength="160" placeholder="Анна Иванова" />
+      </label>
+
+      <label>
+        <span>Email / VK ID</span>
+        <input id="userAccessIdentityInput" type="text" readonly />
+      </label>
+
+      <p id="userAccessSelfNote" class="manual-auth-note hidden">Ваш ADMIN-аккаунт защищён: здесь можно изменить только имя.</p>
 
       <label>
         <span>Статус</span>
@@ -445,6 +456,6 @@
   <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
-  <script src="app.js?v=099y5-media-1"></script>
+  <script src="app.js?v=099y6-admin-1"></script>
 </body>
 </html>

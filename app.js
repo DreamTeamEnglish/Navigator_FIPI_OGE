@@ -1,4 +1,4 @@
-// Navigator_FIPI_OGE v0.9.9Y5 MEDIA HYBRID — Object Storage catalog + direct protected media · IndexedDB catalog cache · legacy fallbacks preserved
+// Navigator_FIPI_OGE v0.9.9Y6 ADMIN POLISH — universal display names · protected self-name edit · MEDIA HYBRID preserved
 (() => {
   'use strict';
 
@@ -125,7 +125,9 @@
 
     userAccessDialog: document.querySelector('#userAccessDialog'),
     closeUserAccessDialogButton: document.querySelector('#closeUserAccessDialogButton'),
-    userAccessEmail: document.querySelector('#userAccessEmail'),
+    userAccessNameInput: document.querySelector('#userAccessNameInput'),
+    userAccessIdentityInput: document.querySelector('#userAccessIdentityInput'),
+    userAccessSelfNote: document.querySelector('#userAccessSelfNote'),
     userStatusSelect: document.querySelector('#userStatusSelect'),
     userAccessLevelSelect: document.querySelector('#userAccessLevelSelect'),
     userExpiryPresetSelect: document.querySelector('#userExpiryPresetSelect'),
@@ -2309,7 +2311,7 @@
       ...profile,
       login_kind: m ? 'vk_manual' : (e ? 'email_managed' : 'email'),
       vk_user_id: m?.vk_user_id ?? null,
-      display_name: m?.display_name ?? e?.display_name ?? null,
+      display_name: profile?.display_name ?? m?.display_name ?? e?.display_name ?? null,
       must_change_password: Boolean(m?.must_change_password ?? e?.must_change_password),
       manual_access_source: m?.access_source ?? null,
       manual_access_created_at: m?.created_at ?? null,
@@ -2756,7 +2758,7 @@
     const [profilesResult, manualResult, emailResult] = await Promise.all([
       supabaseClient
         .from('profiles')
-        .select('id,email,role,status,access_level,access_expires_at,created_at,updated_at')
+        .select('id,email,display_name,role,status,access_level,access_expires_at,created_at,updated_at')
         .order('created_at', { ascending: true }),
       supabaseClient.rpc('oge_admin_manual_vk_directory_v097y'),
       supabaseClient.rpc('oge_admin_email_directory_v099y')
@@ -2926,7 +2928,7 @@
       return profile.display_name || (profile.vk_user_id ? `VK ID ${profile.vk_user_id}` : 'VK-доступ');
     }
     if (profile?.login_kind === 'email_managed') return profile.display_name || profile.email || 'Email-доступ';
-    return profile?.email || profile?.id || 'Пользователь';
+    return profile?.display_name || profile?.email || profile?.id || 'Пользователь';
   }
 
   function isDonutManualProfile(profile) {
@@ -2998,12 +3000,14 @@
       const managedEmail = profile.login_kind === 'email_managed';
       const label = profileDisplayLabel(profile);
       const source = profile.role === 'admin' ? 'admin' : manual ? 'VK · invite' : managedEmail ? 'email · invite' : 'invite';
-      let actions = '<span class="admin-self-note">Ваш аккаунт</span>';
-      if (!self) {
+      let actions = `<button class="admin-mini-button" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button>`;
+      if (self) {
+        actions += '<span class="admin-self-note">Ваш аккаунт</span>';
+      } else {
         const nextStatus = profile.status === 'blocked' ? 'active' : 'blocked';
-        actions = `<button class="admin-mini-button" type="button" data-user-edit="${escapeAttr(profile.id)}">Изменить</button>${manual ? `<button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : managedEmail ? `<button class="admin-mini-button" type="button" data-email-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : ''}<button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
+        actions += `${manual ? `<button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : managedEmail ? `<button class="admin-mini-button" type="button" data-email-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : ''}<button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
       }
-      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(label)}</div>${manual ? `<div class="admin-user-id">VK ID ${escapeHtml(profile.vk_user_id || '—')}</div>` : managedEmail && profile.display_name ? `<div class="admin-user-id">${escapeHtml(profile.email || '—')}</div>` : ''}<div class="admin-user-chips"><span class="admin-chip${manual ? ' vk-manual' : ''}">${manual ? 'VK ID' : 'EMAIL'}</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${escapeHtml(source)}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
+      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(label)}</div>${manual ? `<div class="admin-user-id">VK ID ${escapeHtml(profile.vk_user_id || '—')}</div>` : profile.display_name ? `<div class="admin-user-id">${escapeHtml(profile.email || '—')}</div>` : ''}<div class="admin-user-chips"><span class="admin-chip${manual ? ' vk-manual' : ''}">${manual ? 'VK ID' : 'EMAIL'}</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${escapeHtml(source)}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
     }).join('') : '<div class="admin-users-empty">Пользователей пока нет.</div>';
 
     const connected = donorDirectory.filter(item => Boolean(item.manual)).length;
@@ -3032,7 +3036,7 @@
       const legacyStatusClass = !row ? 'pending' : row.blocked ? 'blocked' : row.last_don_status ? 'active' : 'pending';
 
       const manualActions = manual
-        ? `<button class="admin-mini-button" type="button" data-user-edit-linked="${escapeAttr(manual.id)}">Управление доступом</button><button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(manual.id)}">Сбросить пароль</button>`
+        ? `<button class="admin-mini-button" type="button" data-user-edit-linked="${escapeAttr(manual.id)}">Изменить</button><button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(manual.id)}">Сбросить пароль</button>`
         : `<button class="admin-mini-button success-soft" type="button" data-manual-create-vk="${escapeAttr(vkId)}" data-manual-create-name="${escapeAttr(name)}">Создать вход на Яндекс</button>`;
       const legacyBlock = row && !manual
         ? `<button class="admin-mini-button ${row.blocked ? 'success-soft' : 'danger-soft'}" type="button" data-donut-block="${escapeAttr(vkId)}" data-blocked="${row.blocked ? 'false' : 'true'}">${row.blocked ? 'Разблокировать' : 'Заблокировать'}</button>`
@@ -3158,11 +3162,13 @@
   function openUserAccessEditor(userId) {
     if (appMode !== 'admin') return;
     const profile = adminProfiles.find(p => p.id === userId);
-    if (!profile || profile.id === currentUser?.id) return;
+    if (!profile) return;
 
+    const self = profile.id === currentUser?.id;
     editingAccessUserId = userId;
-    el.userAccessEmail.textContent = profile.login_kind === 'vk_manual'
-      ? `${profileDisplayLabel(profile)} · VK ID ${profile.vk_user_id || '—'}`
+    el.userAccessNameInput.value = profile.display_name || '';
+    el.userAccessIdentityInput.value = profile.login_kind === 'vk_manual'
+      ? `VK ID ${profile.vk_user_id || '—'}`
       : (profile.email || userId);
     el.userStatusSelect.value = profile.status || 'pending';
     el.userAccessLevelSelect.value = profile.access_level === 'demo' ? 'demo' : 'full';
@@ -3177,7 +3183,16 @@
       el.customExpiryLabel.classList.add('hidden');
     }
 
+    // The owner may edit their display name, but cannot accidentally alter
+    // their own ADMIN/FULL/status/expiry from this dialog.
+    el.userStatusSelect.disabled = self;
+    el.userAccessLevelSelect.disabled = self;
+    el.userExpiryPresetSelect.disabled = self;
+    el.customExpiryDate.disabled = self;
+    el.userAccessSelfNote.classList.toggle('hidden', !self);
+
     if (typeof el.userAccessDialog.showModal === 'function') el.userAccessDialog.showModal();
+    window.setTimeout(() => el.userAccessNameInput?.focus(), 40);
   }
 
   function resolveExpiryFromEditor() {
@@ -3194,6 +3209,15 @@
     const days = Number(preset);
     if (![1, 3, 7].includes(days)) return null;
     return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  async function callAdminSetUserDisplayName(profile, displayName) {
+    const { data, error } = await supabaseClient.rpc('admin_set_user_display_name', {
+      p_user_id: profile.id,
+      p_display_name: displayName || null
+    });
+    if (error) throw error;
+    return data;
   }
 
   async function callAdminSetUserAccess(profile, nextStatus, nextLevel, nextExpiry) {
@@ -3227,23 +3251,35 @@
     const profile = adminProfiles.find(p => p.id === editingAccessUserId);
     if (!profile) return;
 
+    const self = profile.id === currentUser?.id;
+    const displayName = String(el.userAccessNameInput.value || '').trim();
+    if (displayName.length > 160) {
+      alert('Имя слишком длинное: максимум 160 символов.');
+      return;
+    }
+
     el.saveUserAccessButton.disabled = true;
     try {
-      const expiry = resolveExpiryFromEditor();
-      await callAdminSetUserAccess(
-        profile,
-        el.userStatusSelect.value,
-        el.userAccessLevelSelect.value,
-        expiry
-      );
-      await syncLegacyDonutBlockIfLinked(profile, el.userStatusSelect.value);
+      if (!self) {
+        const expiry = resolveExpiryFromEditor();
+        await callAdminSetUserAccess(
+          profile,
+          el.userStatusSelect.value,
+          el.userAccessLevelSelect.value,
+          expiry
+        );
+        await syncLegacyDonutBlockIfLinked(profile, el.userStatusSelect.value);
+      }
+
+      await callAdminSetUserDisplayName(profile, displayName);
+
       el.userAccessDialog.close();
       editingAccessUserId = null;
       await refreshAdminPanel();
-      showToast('✓ Доступ пользователя обновлён');
+      showToast(self ? '✓ Имя администратора обновлено' : '✓ Пользователь обновлён');
     } catch (error) {
-      console.error('User access save failed:', error);
-      alert(`Не удалось изменить доступ: ${error?.message || error}`);
+      console.error('User editor save failed:', error);
+      alert(`Не удалось сохранить изменения: ${error?.message || error}`);
     } finally {
       el.saveUserAccessButton.disabled = false;
     }

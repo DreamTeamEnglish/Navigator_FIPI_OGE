@@ -2698,6 +2698,10 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     try {
       const access = await window.OGE_FIREBASE_AUTH.requestOgeAccess();
       currentProfile = access.profile;
+      if (currentProfile.must_change_password) {
+        showForcedPasswordDialog();
+        return;
+      }
       records = loadCloudCache(user.id);
       showBoot('Загружаю защищённый каталог…', 'Доступ подтверждён · 1735 заданий');
       const cards = await fetchFullCatalogFromDescriptor(access);
@@ -3778,6 +3782,13 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
 
     el.saveFirstPasswordButton.disabled = true;
     try {
+      if (usesFirebaseEmergencyAuth()) {
+        await window.OGE_FIREBASE_AUTH.changePassword(password);
+        if (currentProfile) currentProfile.must_change_password = false;
+        if (el.firstPasswordDialog?.open) el.firstPasswordDialog.close();
+        await activateFirebaseSession(currentUser?.raw);
+        return;
+      }
       const token = await currentSupabaseAccessToken();
       const result = await callManualAccess({ action: 'set_first_password', new_password: password }, token);
       const identifier = currentProfile?.login_kind === 'vk_manual'

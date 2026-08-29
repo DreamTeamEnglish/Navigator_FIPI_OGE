@@ -49,6 +49,15 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
       return validateAccessPayload(await requestProtected());
     },
 
+    async changePassword(newPassword) {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Сессия Firebase не найдена.');
+      await ops.updatePassword(user, newPassword);
+      await requestProtected({}, { method: 'POST', body: { action: 'complete-password-change' } });
+      await user.getIdToken(true);
+      return true;
+    },
+
     async requestBackupItem(fipiId) {
       const payload = await requestProtected({ mode: 'backup-item', fipi_id: fipiId });
       if (!payload.item || typeof payload.item !== 'object') throw new Error('Invalid backup item payload.');

@@ -1,93 +1,72 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import vm from 'node:vm';
 
-async function runAdapter({ config, firebase }) {
-  const source = await fs.readFile(new URL('./firebase-auth-adapter.js', import.meta.url), 'utf8');
-  const window = { OGE_FIREBASE_CONFIG: config, firebase };
-  const context = vm.createContext({ window, console });
-  vm.runInContext(source, context, { filename: 'firebase-auth-adapter.js' });
-  return window;
+import { createFirebaseAuthAdapter } from '../firebase-auth-adapter.mjs';
+
+function testHarness({ accessPayload, signedIn = true } = {}) {
+  const calls = { signIn: null, authorization: '', signedOut: 0, reset: null };
+  const user = { uid: 'uid-1', email: 'vk-900000001@dreamteam.invalid', getIdToken: async force => {
+    assert.equal(force, true);
+    return 'test-id-token';
+  } };
+  const auth = { currentUser: signedIn ? user : null };
+  const ops = {
+    signInWithEmailAndPassword: async (_auth, email, password) => {
+      calls.signIn = [email, password];
+      return { user };
+    },
+    signOut: async () => { calls.signedOut += 1; },
+    onAuthStateChanged: (_auth, callback) => { callback(user); return () => {}; },
+    sendPasswordResetEmail: async (_auth, email) => { calls.reset = email; },
+  };
+  const fetchImpl = async (_url, init) => {
+    calls.authorization = init.headers.Authorization;
+    return {
+      ok: true,
+      json: async () => accessPayload || {
+        ok: true,
+        profile: { role: 'teacher', status: 'active', access_level: 'full', access_expires_at: null },
+        catalog: {
+          url: 'https://storage.yandexcloud.net/signed',
+          version: '2026.08.24.1-bcc853de34ab',
+          bytes: 382742,
+          sha256: 'b'.repeat(64),
+          card_count: 1735,
+        },
+      },
+    };
+  };
+  const adapter = createFirebaseAuthAdapter({ auth, ops, accessUrl: 'https://access.example.test', fetchImpl });
+  return { adapter, calls, user };
 }
 
-const validConfig = Object.freeze({
-  apiKey: 'public-web-api-key',
-  authDomain: 'dte-auth-pilot.firebaseapp.com',
-  projectId: 'dte-auth-pilot',
-  storageBucket: 'dte-auth-pilot.firebasestorage.app',
-  messagingSenderId: '383382536615',
-  appId: '1:383382536615:web:test',
+test('maps numeric VK ID before Firebase sign-in', async () => {
+  const { adapter, calls } = testHarness();
+  await adapter.signIn('900000001', 'secret');
+  assert.deepEqual(calls.signIn, ['vk-900000001@dreamteam.invalid', 'secret']);
 });
 
-function makeFirebaseFake() {
-  const calls = [];
-  const auth = {
-    languageCode: 'en',
-    currentUser: null,
-    signInWithEmailAndPassword(email, password) {
-      calls.push(['signIn', email, password]);
-      return Promise.resolve({ user: { email } });
-    },
-    sendPasswordResetEmail(email) {
-      calls.push(['reset', email]);
-      return Promise.resolve();
-    },
-    signOut() {
-      calls.push(['signOut']);
-      return Promise.resolve();
-    },
-    onAuthStateChanged(callback) {
-      calls.push(['onAuthStateChanged']);
-      callback(null);
-      return () => {};
-    },
-  };
-  const app = { auth: () => auth };
-  const firebase = {
-    apps: [],
-    initializeApp(config, name) {
-      calls.push(['initializeApp', config, name]);
-      this.apps.push(app);
-      return app;
-    },
-  };
-  return { firebase, calls, auth };
-}
-
-test('adapter initializes a named Firebase app without touching Supabase', async () => {
-  const { firebase, calls, auth } = makeFirebaseFake();
-  const window = await runAdapter({ config: validConfig, firebase });
-
-  assert.equal(window.OGE_FIREBASE_AUTH.ready, true);
-  assert.equal(window.OGE_FIREBASE_AUTH.mode, 'pilot');
-  assert.equal(auth.languageCode, 'ru');
-  assert.deepEqual(calls[0], ['initializeApp', validConfig, 'oge-firebase-auth-pilot']);
+test('sends a freshly issued Firebase ID token to the Yandex endpoint', async () => {
+  const { adapter, calls } = testHarness();
+  const result = await adapter.requestOgeAccess();
+  assert.equal(calls.authorization, 'Bearer test-id-token');
+  assert.equal(result.catalog.card_count, 1735);
 });
 
-test('adapter exposes auth methods for the later Navigator integration', async () => {
-  const { firebase, calls } = makeFirebaseFake();
-  const window = await runAdapter({ config: validConfig, firebase });
-
-  await window.OGE_FIREBASE_AUTH.signIn('teacher@example.com', 'secret');
-  await window.OGE_FIREBASE_AUTH.sendPasswordResetEmail('teacher@example.com');
-  await window.OGE_FIREBASE_AUTH.signOut();
-
-  assert.deepEqual(calls.slice(1), [
-    ['signIn', 'teacher@example.com', 'secret'],
-    ['reset', 'teacher@example.com'],
-    ['signOut'],
-  ]);
+test('signs out through Firebase', async () => {
+  const { adapter, calls } = testHarness();
+  await adapter.signOut();
+  assert.equal(calls.signedOut, 1);
 });
 
-test('adapter refuses placeholder configuration instead of breaking the existing Navigator', async () => {
-  const { firebase, calls } = makeFirebaseFake();
-  const window = await runAdapter({
-    config: { ...validConfig, apiKey: 'PASTE_API_KEY_HERE' },
-    firebase,
-  });
+test('offers reset only for real email accounts', async () => {
+  const { adapter, calls } = testHarness();
+  await adapter.sendPasswordReset('Teacher@Example.com');
+  assert.equal(calls.reset, 'teacher@example.com');
+  await assert.rejects(() => adapter.sendPasswordReset('900000001'), /администратору/i);
+});
 
-  assert.equal(window.OGE_FIREBASE_AUTH.ready, false);
-  assert.match(window.OGE_FIREBASE_AUTH.error, /configuration/i);
-  assert.equal(calls.length, 0);
+test('rejects access when no Firebase session exists', async () => {
+  const { adapter } = testHarness({ signedIn: false });
+  await assert.rejects(() => adapter.requestOgeAccess(), /сессия/i);
 });

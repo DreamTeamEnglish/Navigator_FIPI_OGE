@@ -233,6 +233,11 @@
     el.forgotVkPasswordButton?.classList.toggle('hidden', !login);
   }
 
+  function usesFirebaseEmergencyAuth() {
+    if (CONFIG.authProvider !== 'firebase') return false;
+    return Boolean(window.OGE_FIREBASE_AUTH);
+  }
+
   async function currentSupabaseAccessToken() {
     if (!supabaseClient) return '';
     const { data, error } = await supabaseClient.auth.getSession();
@@ -301,6 +306,7 @@
   }
 
   function isCloudConfigured() {
+    if (CONFIG.authProvider === 'firebase') return usesFirebaseEmergencyAuth();
     return Boolean(CONFIG.supabaseUrl && configuredKey() && window.supabase?.createClient);
   }
 
@@ -2044,10 +2050,7 @@
     return data;
   }
 
-  async function fetchFullCatalogFromObjectStorage() {
-    const delivery = await requestObjectStorageCatalogDescriptor();
-    if (!delivery) return null;
-
+  async function fetchFullCatalogFromDescriptor(delivery) {
     const descriptor = delivery.catalog;
     const cacheIdentity = `${descriptor.version || ''}:${descriptor.sha256 || ''}`;
 
@@ -2069,9 +2072,17 @@
     }
 
     if (el.bootDetail) el.bootDetail.textContent = `Доступ подтверждён · загружаю каталог ${descriptor.version}`;
-    const response = await fetch(descriptor.url, { method: 'GET', cache: 'no-store' });
-    if (!response.ok) throw new Error(`Object Storage catalog HTTP ${response.status}.`);
-    const bytes = await response.arrayBuffer();
+    let bytes;
+    if (descriptor.encoding === 'base64' && descriptor.data) {
+      const binary = atob(descriptor.data);
+      const decoded = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) decoded[i] = binary.charCodeAt(i);
+      bytes = decoded.buffer;
+    } else {
+      const response = await fetch(descriptor.url, { method: 'GET', cache: 'no-store' });
+      if (!response.ok) throw new Error(`Object Storage catalog HTTP ${response.status}.`);
+      bytes = await response.arrayBuffer();
+    }
     const cards = await parseCompressedCatalog(bytes, descriptor);
 
     try {
@@ -2089,6 +2100,12 @@
 
     console.info(`OGE catalog ${descriptor.version}: Object Storage download (${cards.length} cards, ${bytes.byteLength} bytes).`);
     return cards;
+  }
+
+  async function fetchFullCatalogFromObjectStorage() {
+    const delivery = await requestObjectStorageCatalogDescriptor();
+    if (!delivery) return null;
+    return fetchFullCatalogFromDescriptor(delivery);
   }
 
   async function fetchFullCatalog() {
@@ -2650,6 +2667,32 @@
         authActivationPromise = null;
         authActivationUserId = '';
       }
+    }
+  }
+
+  async function activateFirebaseSession(firebaseUser) {
+    if (!firebaseUser?.uid) return;
+    const user = { id: firebaseUser.uid, email: firebaseUser.email || '', raw: firebaseUser };
+    currentUser = user;
+    currentProfile = null;
+    showBoot('Проверяю доступ…', 'Firebase подтверждён · проверяю право FULL');
+
+    try {
+      const access = await window.OGE_FIREBASE_AUTH.requestOgeAccess();
+      currentProfile = access.profile;
+      records = loadCloudCache(user.id);
+      showBoot('Загружаю защищённый каталог…', 'Доступ подтверждён · 1735 заданий');
+      const cards = await fetchFullCatalogFromDescriptor(access);
+      setTasks(cards, new Map());
+      enterApp(access.profile.role === 'admin' ? 'admin' : 'teacher');
+      lastResumeValidationAt = Date.now();
+      lastVisibleStatusRefreshAt = Date.now();
+    } catch (error) {
+      console.error('Firebase access activation failed:', error);
+      const blocked = ['access_blocked', 'access_expired', 'access_missing', 'access_pending', 'full_required']
+        .includes(String(error?.code || ''));
+      if (blocked) showAccessEnded(error.message || 'Доступ к Navigator закрыт.');
+      else showGate('blocked', error.message || 'Не удалось проверить доступ к защищённому каталогу.', 'error');
     }
   }
 
@@ -3479,6 +3522,30 @@
 
   async function signIn() {
     clearAuthError();
+    if (CONFIG.authProvider === 'firebase') {
+      if (!usesFirebaseEmergencyAuth()) return showAuthError('Firebase ещё не готов. Обновите страницу через несколько секунд.');
+      const identifier = String(el.loginIdentifier?.value || '').trim();
+      const password = el.password.value;
+      if (!identifier || !password) return showAuthError('Введите email или числовой VK ID и пароль.');
+      el.signIn.disabled = true;
+      try {
+        const user = await window.OGE_FIREBASE_AUTH.signIn(identifier, password);
+        if (el.authDialog?.open) el.authDialog.close();
+        await activateFirebaseSession(user);
+      } catch (error) {
+        const code = String(error?.code || '');
+        if (code.includes('user-disabled')) {
+          if (el.authDialog?.open) el.authDialog.close();
+          return showAccessEnded('Доступ заблокирован администратором.');
+        }
+        showAuthError(code.includes('invalid-credential')
+          ? 'Неверный email / VK ID или пароль.'
+          : (error?.message || 'Не удалось войти.'));
+      } finally {
+        el.signIn.disabled = false;
+      }
+      return;
+    }
     if (!supabaseClient) return showAuthError('Supabase не настроен в config.js.');
 
     const login = resolveLoginIdentifier(el.loginIdentifier?.value || '');
@@ -3516,6 +3583,19 @@
     if (el.authDialog?.open) el.authDialog.close();
     if (typeof el.recoveryDialog?.showModal === 'function' && !el.recoveryDialog.open) el.recoveryDialog.showModal();
     window.setTimeout(() => (identifier ? el.recoveryCodeInput : el.recoveryVkIdInput)?.focus(), 40);
+  }
+
+  async function handlePasswordRecovery() {
+    if (!usesFirebaseEmergencyAuth()) return openRecoveryDialog();
+    clearAuthError();
+    const identifier = String(el.loginIdentifier?.value || '').trim();
+    if (!identifier) return showAuthError('Сначала введите email или числовой VK ID.');
+    try {
+      await window.OGE_FIREBASE_AUTH.sendPasswordReset(identifier);
+      showAuthError('Письмо для смены пароля отправлено. Проверьте почту.');
+    } catch (error) {
+      showAuthError(error?.message || 'Не удалось отправить письмо.');
+    }
   }
 
   function showRecoveryCode(code, continuation, recoveredLogin = null) {
@@ -3652,6 +3732,14 @@
     if (appMode === 'demo') {
       if (currentUser) await activateAuthenticatedSession(currentUser);
       else showGate('gate');
+      return;
+    }
+    if (usesFirebaseEmergencyAuth() && currentUser) {
+      sessionStorage.removeItem(`oge-navigator-access-session:${currentUser.id}`);
+      await window.OGE_FIREBASE_AUTH.signOut();
+      currentUser = null;
+      currentProfile = null;
+      showGate('gate');
       return;
     }
     if (supabaseClient && currentUser) {
@@ -3803,6 +3891,28 @@
   }
 
   async function initCloud() {
+    if (CONFIG.authProvider === 'firebase') {
+      if (!usesFirebaseEmergencyAuth()) {
+        initialBootPending = false;
+        showGate('gate', 'Firebase не загрузился. Обновите страницу и проверьте доступ к www.gstatic.com.', 'warning');
+        return false;
+      }
+      el.openDemoButton?.classList.add('hidden');
+      el.openDonutButton?.classList.add('hidden');
+      el.adminAccessButton?.classList.add('hidden');
+      const user = window.OGE_FIREBASE_AUTH.getSession();
+      if (user) await activateFirebaseSession(user);
+      window.OGE_FIREBASE_AUTH.onSessionChanged(nextUser => {
+        if (nextUser && nextUser.uid !== currentUser?.id) void activateFirebaseSession(nextUser);
+        if (!nextUser && currentUser) {
+          currentUser = null;
+          currentProfile = null;
+          showGate('gate');
+        }
+      });
+      initialBootPending = false;
+      return true;
+    }
     if (!isCloudConfigured()) {
       el.openLoginButton.disabled = true;
       el.openDemoButton.disabled = true;
@@ -3830,6 +3940,7 @@
 
   function refreshWhenVisible() {
     if (document.visibilityState !== 'visible') return;
+    if (CONFIG.authProvider === 'firebase') return;
     if (currentUser && isAuthenticatedWorkspaceMode() && Date.now() - lastVisibleStatusRefreshAt >= RESUME_STATUS_RECHECK_MS) {
       lastVisibleStatusRefreshAt = Date.now();
       void loadCloudStatuses();
@@ -3838,6 +3949,7 @@
 
   window.setInterval(() => {
     if (document.visibilityState !== 'visible') return;
+    if (CONFIG.authProvider === 'firebase') return;
     if (appMode === 'donut' || (currentUser && isAuthenticatedWorkspaceMode())) {
       void refreshBackupRuntime();
     }
@@ -3847,6 +3959,7 @@
   // never shows boot; it only reacts to a confirmed blocked/expired state.
   window.setInterval(() => {
     if (document.visibilityState !== 'visible') return;
+    if (CONFIG.authProvider === 'firebase') return;
     if (appMode === 'donut' || (currentUser && isAuthenticatedWorkspaceMode())) scheduleResumeValidation();
   }, RESUME_ACCESS_RECHECK_MS);
 
@@ -3869,7 +3982,7 @@
   el.password.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
   el.loginIdentifier?.addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
   el.loginIdentifier?.addEventListener('input', updateRecoveryVisibility);
-  el.forgotVkPasswordButton?.addEventListener('click', openRecoveryDialog);
+  el.forgotVkPasswordButton?.addEventListener('click', handlePasswordRecovery);
   el.saveFirstPasswordButton?.addEventListener('click', saveFirstPassword);
   el.firstPasswordRepeat?.addEventListener('keydown', e => { if (e.key === 'Enter') saveFirstPassword(); });
   el.recoverPasswordButton?.addEventListener('click', recoverPassword);

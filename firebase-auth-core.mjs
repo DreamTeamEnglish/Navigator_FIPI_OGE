@@ -1,49 +1,59 @@
-const VK_EMAIL_DOMAIN = 'dreamteam.invalid';
+const VK_TECHNICAL_DOMAIN = 'dreamteam.invalid';
+const EXPECTED_CATALOG_BYTES = 382742;
+const EXPECTED_CARD_COUNT = 1735;
 
-export function parseLoginIdentifier(value) {
-  const raw = String(value ?? '').trim();
-  if (!raw) return null;
-
-  if (/^\d+$/.test(raw)) {
-    return {
-      kind: 'vk',
-      identifier: raw,
-      email: `vk-${raw}@${VK_EMAIL_DOMAIN}`,
-      vkId: raw,
-    };
-  }
-
-  const email = raw.toLowerCase();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return {
-      kind: 'email',
-      identifier: email,
-      email,
-    };
-  }
-
-  return null;
+export function identifierToFirebaseEmail(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (/^\d{1,15}$/.test(normalized)) return `vk-${normalized}@${VK_TECHNICAL_DOMAIN}`;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return normalized;
+  throw new Error('Введите email или числовой VK ID.');
 }
 
-export function recoveryRouteForIdentifier(value) {
-  const login = parseLoginIdentifier(value);
-  if (!login) return null;
-  if (login.kind === 'vk') return { kind: 'admin', vkId: login.vkId };
-  return { kind: 'email', email: login.email };
+function invalidCatalog() {
+  return new Error('Invalid OGE catalog descriptor.');
 }
 
-export function firebaseAuthErrorText(error) {
-  const code = String(error?.code || '');
-  if (code === 'auth/user-disabled') return 'Доступ заблокирован администратором.';
-  if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found'].includes(code)) {
-    return 'Неверный логин или пароль.';
+export function validateAccessPayload(payload) {
+  if (!payload || payload.ok !== true || typeof payload.profile !== 'object') {
+    throw new Error('Invalid OGE access payload.');
   }
-  if (code === 'auth/too-many-requests') {
-    return 'Слишком много попыток. Подождите немного и попробуйте снова.';
+
+  const { profile, catalog } = payload;
+  if (!['admin', 'teacher'].includes(profile.role)
+    || profile.status !== 'active'
+    || profile.access_level !== 'full') {
+    throw new Error('Invalid OGE access profile.');
   }
-  if (code === 'auth/network-request-failed') {
-    return 'Не удалось связаться с Firebase. Проверьте интернет и попробуйте снова.';
+
+  if (!catalog || typeof catalog !== 'object') throw invalidCatalog();
+
+  let validDelivery = false;
+  if (catalog.encoding === 'base64') {
+    validDelivery = /^H4sI[A-Za-z0-9+/=]{32,}$/.test(String(catalog.data || ''));
+  } else {
+    try { validDelivery = new URL(String(catalog.url || '')).protocol === 'https:'; }
+    catch { validDelivery = false; }
   }
-  if (code === 'auth/invalid-email') return 'Введите корректный email или числовой VK ID.';
-  return 'Не удалось выполнить вход. Попробуйте ещё раз.';
+
+  if (!validDelivery
+    || Number(catalog.bytes) !== EXPECTED_CATALOG_BYTES
+    || !/^[a-f0-9]{64}$/.test(String(catalog.sha256 || ''))
+    || Number(catalog.card_count) !== EXPECTED_CARD_COUNT
+    || !String(catalog.version || '').trim()) {
+    throw invalidCatalog();
+  }
+
+  return payload;
+}
+
+export function accessErrorMessage(code) {
+  const messages = {
+    access_blocked: 'Доступ заблокирован администратором.',
+    access_expired: 'Срок доступа к Navigator закончился.',
+    access_missing: 'Для этого аккаунта нет доступа к Navigator.',
+    access_pending: 'Доступ ожидает подтверждения администратора.',
+    full_required: 'Для этого аккаунта нет полного доступа к каталогу.',
+    invalid_token: 'Сессия завершена. Войдите снова.',
+  };
+  return messages[code] || 'Не удалось подтвердить доступ к Navigator.';
 }

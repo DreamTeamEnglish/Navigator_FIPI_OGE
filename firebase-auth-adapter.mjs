@@ -30,7 +30,7 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
       const token = await user.getIdToken(true);
       const response = await fetchImpl(accessUrl, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'X-Firebase-Token': token },
         cache: 'no-store',
       });
       const payload = await response.json().catch(() => null);

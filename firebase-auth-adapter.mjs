@@ -91,6 +91,12 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
       return payload;
     },
 
+    async adminImportUser(user) {
+      const payload = await requestProtected({}, { method: 'POST', body: { action: 'import-user', user } });
+      if (!payload.user || !payload.user.firebase_uid) throw new Error('Invalid imported user payload.');
+      return payload.user;
+    },
+
     async sendPasswordReset(identifier) {
       const email = identifierToFirebaseEmail(identifier);
       if (/^vk-\d+@dreamteam\.invalid$/i.test(email)) {

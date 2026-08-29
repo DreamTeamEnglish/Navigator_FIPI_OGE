@@ -334,7 +334,11 @@
       <section id="adminParticipantsPanel" class="admin-panel">
         <div class="admin-manual-access-bar">
           <div><strong>Email-доступ по приглашению</strong><span>Создайте пользователю вход по его email. При первом входе он сменит временный пароль на свой.</span></div>
-          <button id="createEmailAccessButton" class="admin-toolbar-button" type="button">+ Email-доступ</button>
+          <div class="admin-toolbar">
+            <button id="importSupabaseUsersButton" class="admin-toolbar-button" type="button">Импорт Supabase</button>
+            <input id="importSupabaseUsersInput" class="hidden" type="file" accept="application/json,.json" />
+            <button id="createEmailAccessButton" class="admin-toolbar-button" type="button">+ Email-доступ</button>
+          </div>
         </div>
         <div id="adminUserStats" class="admin-user-stats admin-user-stats-top">Загрузка…</div>
         <div id="adminUsersList" class="admin-user-list"></div>
@@ -456,7 +460,7 @@
   <script src="https://unpkg.com/@vkid/sdk@2.6.7/dist-sdk/umd/index.js"></script>
   <script src="config.js"></script>
   <script src="data.js"></script>
-  <script type="module" src="firebase-auth-adapter.mjs?v=oge-firebase-admin-1"></script>
-  <script type="module" src="app.js?v=099y6-firebase-admin-1"></script>
+  <script type="module" src="firebase-auth-adapter.mjs?v=oge-firebase-admin-2"></script>
+  <script type="module" src="app.js?v=099y6-firebase-admin-2"></script>
 </body>
 </html>

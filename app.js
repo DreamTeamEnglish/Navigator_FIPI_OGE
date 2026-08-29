@@ -152,6 +152,8 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     closeAdminCredentialsButton: document.querySelector('#closeAdminCredentialsButton'),
 
     createEmailAccessButton: document.querySelector('#createEmailAccessButton'),
+    importSupabaseUsersButton: document.querySelector('#importSupabaseUsersButton'),
+    importSupabaseUsersInput: document.querySelector('#importSupabaseUsersInput'),
     emailAccessAdminDialog: document.querySelector('#emailAccessAdminDialog'),
     closeEmailAccessAdminDialogButton: document.querySelector('#closeEmailAccessAdminDialogButton'),
     emailAccessNameInput: document.querySelector('#emailAccessNameInput'),
@@ -3526,6 +3528,58 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     }
   }
 
+  function downloadJsonFile(filename, value) {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function importSupabaseUsersFile(file) {
+    if (!usesFirebaseEmergencyAuth() || appMode !== 'admin' || !file) return;
+    let payload;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      alert('Файл импорта не является корректным JSON.');
+      return;
+    }
+    const users = Array.isArray(payload?.users) ? payload.users : [];
+    if (!users.length || users.length > 100) {
+      alert('В файле импорта нет пользователей или их слишком много.');
+      return;
+    }
+    if (!window.confirm(`Перенести в Firebase пользователей: ${users.length}? Уже существующие аккаунты будут только обновлены.`)) return;
+
+    el.importSupabaseUsersButton.disabled = true;
+    el.importSupabaseUsersButton.textContent = `Импорт 0/${users.length}`;
+    const results = [];
+    for (let index = 0; index < users.length; index += 1) {
+      const user = users[index];
+      try {
+        results.push({ ok: true, ...(await window.OGE_FIREBASE_AUTH.adminImportUser(user)) });
+      } catch (error) {
+        results.push({ ok: false, login_label: user?.login_label || '', error: error?.code || error?.message || 'import_failed' });
+      }
+      el.importSupabaseUsersButton.textContent = `Импорт ${index + 1}/${users.length}`;
+    }
+    const created = results.filter(row => row.ok && row.created).length;
+    const updated = results.filter(row => row.ok && !row.created).length;
+    const failed = results.filter(row => !row.ok).length;
+    downloadJsonFile('OGE_FIREBASE_MIGRATION_RESULT.json', {
+      migrated_at: new Date().toISOString(), created, updated, failed, users: results,
+    });
+    await refreshAdminPanel();
+    el.importSupabaseUsersButton.disabled = false;
+    el.importSupabaseUsersButton.textContent = 'Импорт Supabase';
+    showToast(`✓ Импорт: создано ${created} · обновлено ${updated} · ошибок ${failed}`);
+  }
+
 
   async function createManualVkAccess() {
     clearInlineError(el.manualVkAdminError);
@@ -4119,6 +4173,12 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   el.adminDonutTab?.addEventListener('click', () => setAdminTab('donut'));
   el.createManualVkButton?.addEventListener('click', () => openManualVkAdminDialog('', '', 'donut'));
   el.createEmailAccessButton?.addEventListener('click', openEmailAccessAdminDialog);
+  el.importSupabaseUsersButton?.addEventListener('click', () => el.importSupabaseUsersInput?.click());
+  el.importSupabaseUsersInput?.addEventListener('change', async () => {
+    const file = el.importSupabaseUsersInput.files?.[0] || null;
+    el.importSupabaseUsersInput.value = '';
+    await importSupabaseUsersFile(file);
+  });
   el.closeEmailAccessAdminDialogButton?.addEventListener('click', () => el.emailAccessAdminDialog.close());
   el.createEmailAccessSubmitButton?.addEventListener('click', createManagedEmailAccess);
   el.emailAccessEmailInput?.addEventListener('keydown', e => { if (e.key === 'Enter') createManagedEmailAccess(); });

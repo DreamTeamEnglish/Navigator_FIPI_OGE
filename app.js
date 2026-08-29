@@ -1414,6 +1414,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function currentBackupAccess() {
+    if (usesFirebaseEmergencyAuth()) return { kind: 'firebase' };
     if (appMode === 'donut') {
       const token = sessionStorage.getItem(`${DONUT_STORAGE_PREFIX}session`) || '';
       if (!token) throw new Error('Сессия VK Donut завершена. Войдите через VK снова.');
@@ -1430,6 +1431,9 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function fetchBackupItemPayload(fipiId, access) {
+    if (access?.kind === 'firebase') {
+      return window.OGE_FIREBASE_AUTH.requestBackupItem(fipiId);
+    }
     // VK Donut does not have a Supabase Auth JWT, so its protected backup item
     // is resolved server-side by oge-backup-gateway using X-OGE-Donut-Session.
     if (access?.kind === 'donut') {
@@ -1470,6 +1474,15 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function fetchObjectStorageMedia(mediaId, access) {
+    if (access?.kind === 'firebase') {
+      const signed = await window.OGE_FIREBASE_AUTH.requestBackupMedia(mediaId);
+      return {
+        url: signed.url,
+        direct: true,
+        expiresAt: signed.expires_at || '',
+        objectKey: signed.object_key || ''
+      };
+    }
     // The historical hidden Donut session is not a Supabase Auth JWT.
     // Keep it on the proven legacy gateway. Current VK-ID/email FULL logins
     // use Supabase Auth and therefore take the direct Object Storage route.
@@ -2681,6 +2694,11 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
       showBoot('Загружаю защищённый каталог…', 'Доступ подтверждён · 1735 заданий');
       const cards = await fetchFullCatalogFromDescriptor(access);
       setTasks(cards, new Map());
+      backupRuntime = {
+        content_source: 'fipi',
+        yandex_backup_ready: true,
+        backup_version: '0.2.2-firebase'
+      };
       enterApp(access.profile.role === 'admin' ? 'admin' : 'teacher');
       lastResumeValidationAt = Date.now();
       lastVisibleStatusRefreshAt = Date.now();

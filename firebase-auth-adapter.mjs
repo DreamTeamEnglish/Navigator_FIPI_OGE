@@ -3,6 +3,26 @@ import { identifierToFirebaseEmail, validateAccessPayload } from './firebase-aut
 export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fetch }) {
   if (!auth || !ops) throw new Error('Firebase adapter dependencies are missing.');
 
+  async function requestProtected(params = {}) {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Сессия Firebase не найдена.');
+    if (!accessUrl) throw new Error('Сервер доступа OGE ещё не подключён.');
+    const token = await user.getIdToken(true);
+    const url = new URL(accessUrl);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    const response = await fetchImpl(url.toString(), {
+      method: 'GET', headers: { 'X-Firebase-Token': token }, cache: 'no-store',
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      const error = new Error(payload?.error || `Ошибка сервера доступа (${response.status}).`);
+      error.code = payload?.error || 'access_service_error';
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  }
+
   return Object.freeze({
     async signIn(identifier, password) {
       const email = identifierToFirebaseEmail(identifier);
@@ -23,24 +43,20 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
     },
 
     async requestOgeAccess() {
-      const user = auth.currentUser;
-      if (!user) throw new Error('Сессия Firebase не найдена.');
-      if (!accessUrl) throw new Error('Сервер доступа OGE ещё не подключён.');
+      return validateAccessPayload(await requestProtected());
+    },
 
-      const token = await user.getIdToken(true);
-      const response = await fetchImpl(accessUrl, {
-        method: 'GET',
-        headers: { 'X-Firebase-Token': token },
-        cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.ok) {
-        const error = new Error(payload?.error || `Ошибка сервера доступа (${response.status}).`);
-        error.code = payload?.error || 'access_service_error';
-        error.status = response.status;
-        throw error;
-      }
-      return validateAccessPayload(payload);
+    async requestBackupItem(fipiId) {
+      const payload = await requestProtected({ mode: 'backup-item', fipi_id: fipiId });
+      if (!payload.item || typeof payload.item !== 'object') throw new Error('Invalid backup item payload.');
+      return payload.item;
+    },
+
+    async requestBackupMedia(mediaId) {
+      const payload = await requestProtected({ mode: 'backup-media', media_id: mediaId });
+      const url = String(payload?.media?.url || '');
+      if (!url.startsWith('https://storage.yandexcloud.net/')) throw new Error('Invalid backup media URL.');
+      return payload.media;
     },
 
     async sendPasswordReset(identifier) {

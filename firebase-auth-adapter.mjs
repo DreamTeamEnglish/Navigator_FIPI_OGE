@@ -3,7 +3,7 @@ import { identifierToFirebaseEmail, validateAccessPayload } from './firebase-aut
 export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fetch }) {
   if (!auth || !ops) throw new Error('Firebase adapter dependencies are missing.');
 
-  async function requestProtected(params = {}) {
+  async function requestProtected(params = {}, { method = 'GET', body = null } = {}) {
     const user = auth.currentUser;
     if (!user) throw new Error('Сессия Firebase не найдена.');
     if (!accessUrl) throw new Error('Сервер доступа OGE ещё не подключён.');
@@ -11,7 +11,10 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
     const url = new URL(accessUrl);
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
     const response = await fetchImpl(url.toString(), {
-      method: 'GET', headers: { 'X-Firebase-Token': token }, cache: 'no-store',
+      method,
+      headers: { 'X-Firebase-Token': token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      cache: 'no-store',
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload?.ok) {
@@ -57,6 +60,35 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
       const url = String(payload?.media?.url || '');
       if (!url.startsWith('https://storage.yandexcloud.net/')) throw new Error('Invalid backup media URL.');
       return payload.media;
+    },
+
+    async requestAdminDirectory() {
+      const payload = await requestProtected({ mode: 'admin-directory' });
+      if (!Array.isArray(payload.users)) throw new Error('Invalid admin directory payload.');
+      return { users: payload.users, demo_enabled: Boolean(payload.demo_enabled) };
+    },
+
+    async adminUpdateUser(update) {
+      const payload = await requestProtected({}, { method: 'POST', body: { action: 'update-user', ...update } });
+      if (!payload.user || typeof payload.user !== 'object') throw new Error('Invalid admin user payload.');
+      return payload.user;
+    },
+
+    async adminSetDemo(enabled) {
+      const payload = await requestProtected({}, { method: 'POST', body: { action: 'set-demo', enabled: Boolean(enabled) } });
+      return Boolean(payload.demo_enabled);
+    },
+
+    async adminCreateUser(input) {
+      const payload = await requestProtected({}, { method: 'POST', body: { action: 'create-user', ...input } });
+      if (!payload.user || !payload.user.temporary_password) throw new Error('Invalid created user payload.');
+      return payload.user;
+    },
+
+    async adminResetPassword(firebaseUid) {
+      const payload = await requestProtected({}, { method: 'POST', body: { action: 'reset-password', firebase_uid: firebaseUid } });
+      if (!payload.temporary_password) throw new Error('Invalid password reset payload.');
+      return payload;
     },
 
     async sendPasswordReset(identifier) {

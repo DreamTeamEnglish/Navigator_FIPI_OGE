@@ -277,6 +277,10 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     if (code === 'invalid_email') return 'Проверьте email.';
     if (code === 'email_already_linked') return 'Для этого email управляемый доступ уже создан.';
     if (code === 'email_auth_exists') return 'Этот email уже существует в Supabase Auth. Новый аккаунт не создан, чтобы не перезаписать существующий доступ.';
+    if (code === 'firebase_email_exists') return 'Этот email уже существует в Firebase. Новый аккаунт не создан.';
+    if (code === 'firebase_user_missing' || code === 'admin_user_missing') return 'Пользователь не найден в Firebase.';
+    if (code === 'firebase_admin_forbidden') return 'Firebase не разрешил административное действие. Проверьте права сервисного аккаунта.';
+    if (code === 'firebase_admin_config_missing') return 'Административный ключ Firebase ещё не подключён к функции Яндекса.';
     if (code === 'invalid_recovery') return 'Email / VK ID или код восстановления не совпадают.';
     if (code === 'recovery_locked') {
       const mins = Math.max(1, Math.ceil(Number(error?.retryAfterSeconds || 900) / 60));
@@ -827,10 +831,12 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
       preview.classList.toggle('active-state', backupPreviewEnabled);
     }
     if (readyButton) {
+      readyButton.classList.toggle('hidden', usesFirebaseEmergencyAuth());
       readyButton.textContent = ready ? 'Резерв: ON' : 'Резерв: OFF';
       readyButton.classList.toggle('active-state', ready);
     }
     if (source) {
+      source.classList.toggle('hidden', usesFirebaseEmergencyAuth());
       source.disabled = !ready;
       source.textContent = globalYandex ? 'По умолчанию: Яндекс' : 'По умолчанию: FIPI';
       source.classList.toggle('active-state', globalYandex);
@@ -1656,7 +1662,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
 
     const kes = task.liveKesCode ? `КЭС ${task.liveKesCode}` : 'КЭС —';
 
-    const editButton = appMode === 'admin'
+    const editButton = appMode === 'admin' && !usesFirebaseEmergencyAuth()
       ? `<button class="oge-topic-edit-button" type="button" data-edit-topic="${escapeAttr(key)}" title="Изменить темы и подтемы">✎</button>`
       : '';
 
@@ -2813,6 +2819,16 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function fetchAdminProfiles() {
+    if (usesFirebaseEmergencyAuth()) {
+      const directory = await window.OGE_FIREBASE_AUTH.requestAdminDirectory();
+      return directory.users.map(row => ({
+        ...row,
+        id: row.firebase_uid,
+        email: row.login_kind === 'vk_manual' ? '' : row.login_label,
+        vk_user_id: row.login_kind === 'vk_manual' ? row.login_label : null,
+        login_kind: row.login_kind === 'vk_manual' ? 'vk_manual' : 'email_managed',
+      }));
+    }
     const [profilesResult, manualResult, emailResult] = await Promise.all([
       supabaseClient
         .from('profiles')
@@ -2836,6 +2852,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function fetchAdminDonutSessions() {
+    if (usesFirebaseEmergencyAuth()) return [];
     const { data, error } = await supabaseClient.rpc('admin_donut_directory_v096');
     if (!error) return Array.isArray(data) ? data : [];
 
@@ -2876,6 +2893,10 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function fetchDemoEnabled() {
+    if (usesFirebaseEmergencyAuth()) {
+      const directory = await window.OGE_FIREBASE_AUTH.requestAdminDirectory();
+      return Boolean(directory.demo_enabled);
+    }
     const { data, error } = await supabaseClient.rpc('demo_is_enabled');
     if (error) throw error;
     return Boolean(data);
@@ -2952,6 +2973,18 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     const { from, to } = statsRange();
     if (el.statsPeriodLabel) {
       el.statsPeriodLabel.textContent = `${from.toLocaleDateString('ru-RU')} — ${to.toLocaleDateString('ru-RU')}`;
+    }
+
+    if (usesFirebaseEmergencyAuth()) {
+      el.statsVisits.textContent = '—';
+      el.statsUnique.textContent = String(adminProfiles.length || 0);
+      el.statsEmail.textContent = String(adminProfiles.filter(row => row.login_kind === 'email_managed').length);
+      el.statsDonut.textContent = String(adminProfiles.filter(row => row.login_kind === 'vk_manual').length);
+      if (el.statsGithub) el.statsGithub.textContent = '—';
+      if (el.statsYandex) el.statsYandex.textContent = '—';
+      adminStatsUsers = new Map();
+      renderStatsChart([]);
+      return;
     }
 
     let { data, error } = await supabaseClient.rpc('admin_navigator_stats_v096', {
@@ -3054,6 +3087,9 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
       const joined = profile.created_at ? new Date(profile.created_at).toLocaleDateString('ru-RU') : '—';
       const expiry = formatAccessExpiry(profile.access_expires_at);
       const visits = activity?.login_count || 0;
+      const lastLogin = profile.last_login_at
+        ? new Date(profile.last_login_at).toLocaleString('ru-RU')
+        : 'ещё не входил';
       const manual = profile.login_kind === 'vk_manual';
       const managedEmail = profile.login_kind === 'email_managed';
       const label = profileDisplayLabel(profile);
@@ -3065,7 +3101,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
         const nextStatus = profile.status === 'blocked' ? 'active' : 'blocked';
         actions += `${manual ? `<button class="admin-mini-button" type="button" data-manual-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : managedEmail ? `<button class="admin-mini-button" type="button" data-email-reset="${escapeAttr(profile.id)}">Сбросить пароль</button>` : ''}<button class="admin-mini-button ${profile.status === 'blocked' ? 'success-soft' : 'danger-soft'}" type="button" data-user-quick="${escapeAttr(profile.id)}" data-next-status="${escapeAttr(nextStatus)}">${profile.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}</button>`;
       }
-      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(label)}</div>${manual ? `<div class="admin-user-id">VK ID ${escapeHtml(profile.vk_user_id || '—')}</div>` : profile.display_name ? `<div class="admin-user-id">${escapeHtml(profile.email || '—')}</div>` : ''}<div class="admin-user-chips"><span class="admin-chip${manual ? ' vk-manual' : ''}">${manual ? 'VK ID' : 'EMAIL'}</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>Входов за период: <strong>${escapeHtml(visits)}</strong></span><span>Источник: <strong>${escapeHtml(source)}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
+      return `<article class="admin-user-card${self ? ' self' : ''}"><div class="admin-user-main"><div class="admin-user-name">${escapeHtml(label)}</div>${manual ? `<div class="admin-user-id">VK ID ${escapeHtml(profile.vk_user_id || '—')}</div>` : profile.display_name ? `<div class="admin-user-id">${escapeHtml(profile.email || '—')}</div>` : ''}<div class="admin-user-chips"><span class="admin-chip${manual ? ' vk-manual' : ''}">${manual ? 'VK ID' : 'EMAIL'}</span><span class="admin-chip ${levelClass}">${escapeHtml(accessDisplay(profile.access_level))}</span><span class="admin-chip ${statusClass}">${expired ? 'EXPIRED' : escapeHtml(statusDisplay(profile.status))}</span>${profile.must_change_password ? '<span class="admin-chip password-change">TEMP PASSWORD</span>' : ''}${profile.role === 'admin' ? '<span class="admin-chip admin-role">ADMIN</span>' : ''}</div></div><div class="admin-user-info"><span>Добавлен: <strong>${escapeHtml(joined)}</strong></span><span>Срок: <strong>${escapeHtml(expiry)}</strong></span></div><div class="admin-user-info"><span>${usesFirebaseEmergencyAuth() ? 'Последний вход' : 'Входов за период'}: <strong>${escapeHtml(usesFirebaseEmergencyAuth() ? lastLogin : visits)}</strong></span><span>Источник: <strong>${escapeHtml(source)}</strong></span></div><div class="admin-user-actions">${actions}</div></article>`;
     }).join('') : '<div class="admin-users-empty">Пользователей пока нет.</div>';
 
     const connected = donorDirectory.filter(item => Boolean(item.manual)).length;
@@ -3196,6 +3232,12 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     el.toggleDemoButton.disabled = true;
     try {
       const next = !demoEnabledState;
+      if (usesFirebaseEmergencyAuth()) {
+        demoEnabledState = await window.OGE_FIREBASE_AUTH.adminSetDemo(next);
+        renderAdminDemoState();
+        showToast(demoEnabledState ? '✓ Публичный DEMO включён' : '✓ Публичный DEMO выключен');
+        return;
+      }
       const { data, error } = await supabaseClient.rpc('set_demo_enabled', { p_enabled: next });
       if (error) throw error;
       demoEnabledState = Boolean(data);
@@ -3270,6 +3312,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function callAdminSetUserDisplayName(profile, displayName) {
+    if (usesFirebaseEmergencyAuth()) return profile;
     const { data, error } = await supabaseClient.rpc('admin_set_user_display_name', {
       p_user_id: profile.id,
       p_display_name: displayName || null
@@ -3279,6 +3322,15 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function callAdminSetUserAccess(profile, nextStatus, nextLevel, nextExpiry) {
+    if (usesFirebaseEmergencyAuth()) {
+      return window.OGE_FIREBASE_AUTH.adminUpdateUser({
+        firebase_uid: profile.id,
+        status: nextStatus,
+        access_level: nextLevel,
+        access_expires_at: nextExpiry,
+        display_name: String(el.userAccessNameInput?.value || profile.display_name || '').trim(),
+      });
+    }
     const { data, error } = await supabaseClient.rpc('admin_set_user_access', {
       p_user_id: profile.id,
       p_status: nextStatus,
@@ -3290,6 +3342,7 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   }
 
   async function syncLegacyDonutBlockIfLinked(profile, status) {
+    if (usesFirebaseEmergencyAuth()) return;
     if (profile?.login_kind !== 'vk_manual' || !profile.vk_user_id) return;
     const legacy = adminDonutSessions.find(row => String(row.vk_user_id) === String(profile.vk_user_id));
     if (!legacy) return;
@@ -3441,6 +3494,19 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
 
     el.createEmailAccessSubmitButton.disabled = true;
     try {
+      if (usesFirebaseEmergencyAuth()) {
+        const result = await window.OGE_FIREBASE_AUTH.adminCreateUser({
+          login_kind: 'email',
+          login_label: email,
+          display_name: displayName || email,
+          access_level: el.emailAccessLevelSelect.value,
+          access_expires_at: resolveEmailAccessExpiry(),
+        });
+        el.emailAccessAdminDialog.close();
+        await refreshAdminPanel();
+        showAdminCredentials(result, false);
+        return;
+      }
       const token = await currentSupabaseAccessToken();
       const result = await callManualAccess({
         action: 'create_email_access',
@@ -3470,6 +3536,19 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
 
     el.createManualVkAccessButton.disabled = true;
     try {
+      if (usesFirebaseEmergencyAuth()) {
+        const result = await window.OGE_FIREBASE_AUTH.adminCreateUser({
+          login_kind: 'vk_manual',
+          login_label: vkId,
+          display_name: displayName,
+          access_level: 'full',
+          access_expires_at: null,
+        });
+        el.manualVkAdminDialog.close();
+        await refreshAdminPanel();
+        showAdminCredentials(result, false);
+        return;
+      }
       const token = await currentSupabaseAccessToken();
       const result = await callManualAccess({
         action: 'create_access',
@@ -3492,6 +3571,12 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     if (!profile) return;
     if (!window.confirm(`Создать новый временный пароль для ${profileDisplayLabel(profile)}? Старый пароль перестанет работать.`)) return;
     try {
+      if (usesFirebaseEmergencyAuth()) {
+        const result = await window.OGE_FIREBASE_AUTH.adminResetPassword(profile.id);
+        await refreshAdminPanel();
+        showAdminCredentials({ ...profile, ...result, vk_user_id: profile.vk_user_id, login_kind: 'vk_manual' }, true);
+        return;
+      }
       const token = await currentSupabaseAccessToken();
       const result = await callManualAccess({ action: 'reset_password', auth_user_id: profile.id }, token);
       await refreshAdminPanel();
@@ -3506,6 +3591,12 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
     if (!profile) return;
     if (!window.confirm(`Создать новый временный пароль для ${profileDisplayLabel(profile)}? Старый пароль перестанет работать.`)) return;
     try {
+      if (usesFirebaseEmergencyAuth()) {
+        const result = await window.OGE_FIREBASE_AUTH.adminResetPassword(profile.id);
+        await refreshAdminPanel();
+        showAdminCredentials({ ...profile, ...result, email: profile.email, login_kind: 'email_managed' }, true);
+        return;
+      }
       const token = await currentSupabaseAccessToken();
       const result = await callManualAccess({ action: 'reset_email_password', auth_user_id: profile.id }, token);
       await refreshAdminPanel();

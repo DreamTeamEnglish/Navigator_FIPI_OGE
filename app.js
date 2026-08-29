@@ -1,3 +1,5 @@
+import { waitForFirebaseAdapter } from './firebase-ready.mjs';
+
 // Navigator_FIPI_OGE v0.9.9Y6 ADMIN POLISH — universal display names · protected self-name edit · MEDIA HYBRID preserved
 (() => {
   'use strict';
@@ -3888,8 +3890,15 @@
   async function initCloud() {
     if (CONFIG.authProvider === 'firebase') {
       if (!usesFirebaseEmergencyAuth()) {
+        await waitForFirebaseAdapter({
+          getAdapter: () => window.OGE_FIREBASE_AUTH || null,
+          target: window,
+          timeoutMs: 8000
+        });
+      }
+      if (!usesFirebaseEmergencyAuth()) {
         initialBootPending = false;
-        showGate('gate', 'Firebase не загрузился. Обновите страницу и проверьте доступ к www.gstatic.com.', 'warning');
+        showGate('gate', 'Вход загружается медленнее обычного. DEMO уже доступно; для входа попробуйте ещё раз через несколько секунд.', 'info');
         return false;
       }
       el.openDonutButton?.classList.add('hidden');

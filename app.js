@@ -2479,24 +2479,19 @@
 
   async function startDemo() {
     clearAccessMessage();
-    if (!supabaseClient) {
-      showAccessMessage('Подключение Supabase не настроено. Сначала заполните config.js.', 'error');
+    if (!CONFIG.firebaseAccessUrl) {
+      showAccessMessage('DEMO-сервер ещё не подключён.', 'error');
       return;
     }
 
     el.openDemoButton.disabled = true;
     el.openDemoButton.textContent = 'Открываю DEMO…';
     try {
-      const { data, error } = await supabaseClient.rpc('get_demo_tasks');
-      if (error) throw error;
-      const cards = (data || []).map(row => row.card).filter(Boolean);
-
-      if (!cards.length) {
-        const { data: enabled, error: enabledError } = await supabaseClient.rpc('demo_is_enabled');
-        if (enabledError) throw enabledError;
-        if (!enabled) showAccessMessage('Демо-доступ временно недоступен.', 'warning');
-        else showAccessMessage('Демо-подборка пока не настроена.', 'warning');
-        return;
+      const response = await fetch(`${CONFIG.firebaseAccessUrl}?mode=demo`, { method: 'GET', cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+      if (!response.ok || !payload?.ok || payload?.mode !== 'demo' || cards.length !== 44) {
+        throw new Error(payload?.error || `DEMO server ${response.status}`);
       }
 
       records = loadDemoRecords();
@@ -3897,7 +3892,6 @@
         showGate('gate', 'Firebase не загрузился. Обновите страницу и проверьте доступ к www.gstatic.com.', 'warning');
         return false;
       }
-      el.openDemoButton?.classList.add('hidden');
       el.openDonutButton?.classList.add('hidden');
       el.adminAccessButton?.classList.add('hidden');
       const user = window.OGE_FIREBASE_AUTH.getSession();

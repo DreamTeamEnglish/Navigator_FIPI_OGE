@@ -90,7 +90,7 @@ export function createFirebaseAuthAdapter({ auth, ops, accessUrl, fetchImpl = fe
 
     async adminCreateUser(input) {
       const payload = await requestProtected({}, { method: 'POST', body: { action: 'create-user', ...input } });
-      if (!payload.user || !payload.user.temporary_password) throw new Error('Invalid created user payload.');
+      if (!payload.user || (!payload.user.temporary_password && !payload.user.existing_auth)) throw new Error('Invalid created user payload.');
       return payload.user;
     },
 

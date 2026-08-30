@@ -3442,6 +3442,19 @@ import { waitForFirebaseAdapter } from './firebase-ready.mjs';
   function credentialsMessage(result, reset = false) {
     const name = String(result.display_name || '').trim();
     const isEmail = result.login_kind === 'email_managed' || Boolean(result.email && !result.vk_user_id);
+    if (result.existing_auth && !result.temporary_password) {
+      return [
+        name ? `Здравствуйте, ${name}!` : 'Здравствуйте!',
+        '',
+        'Доступ к OGE Lexical Navigator добавлен к вашему существующему общему аккаунту.',
+        '',
+        isEmail ? `Email: ${result.email}` : `VK ID: ${result.vk_user_id}`,
+        'Используйте тот же пароль, с которым вы входите в другие сервисы «Копилочки Английского».',
+        'Если пароль неизвестен, администратор может отдельно выполнить «Сбросить пароль».',
+        '',
+        `Открыть Navigator: ${PRIMARY_NAVIGATOR_URL}`
+      ].join('\n');
+    }
     return [
       name ? `Здравствуйте, ${name}!` : 'Здравствуйте!',
       '',
